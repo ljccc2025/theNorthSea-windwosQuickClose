@@ -15,6 +15,7 @@ public class SwitchRegistryTests
             new PowerShellRunner(new ProcessRunner()),
             new FakeRegistryStore(),
             new FakeSettingsNotifier(),
+            new FakePowerCfg(),
             sessionOwner ?? SameAccount);
 
     [Fact]
@@ -22,13 +23,18 @@ public class SwitchRegistryTests
     {
         var registry = CreateRegistry();
 
-        Assert.Equal(["firewall", "system-proxy", "clipboard-history"], registry.All.Select(item => item.Descriptor.Id));
         Assert.Equal(
-            [SwitchGroup.Security, SwitchGroup.Network, SwitchGroup.System],
+            ["firewall", "system-proxy", "hibernate", "fast-startup", "power-plan", "clipboard-history"],
+            registry.All.Select(item => item.Descriptor.Id));
+        Assert.Equal(
+            [SwitchGroup.Security, SwitchGroup.Network, SwitchGroup.Power, SwitchGroup.Power, SwitchGroup.Power, SwitchGroup.System],
             registry.All.Select(item => item.Descriptor.Group));
         Assert.IsType<FirewallSwitch>(registry.All[0]);
         Assert.IsType<SystemProxySwitch>(registry.All[1]);
-        Assert.IsType<ClipboardHistorySwitch>(registry.All[2]);
+        Assert.IsType<HibernateSwitch>(registry.All[2]);
+        Assert.IsType<FastStartupSwitch>(registry.All[3]);
+        Assert.IsType<PowerPlanSwitch>(registry.All[4]);
+        Assert.IsType<ClipboardHistorySwitch>(registry.All[5]);
     }
 
     [Fact]
@@ -58,28 +64,30 @@ public class SwitchRegistryTests
         var registry = CreateRegistry(ForeignAdmin);
 
         var proxy = registry.All[1];
-        var clipboard = registry.All[2];
+        var clipboard = registry.All[5];
         Assert.IsType<BlockedSwitch>(proxy);
         Assert.IsType<BlockedSwitch>(clipboard);
         Assert.Equal(SwitchState.Blocked, (await proxy.ReadAsync(CancellationToken.None)).State);
         Assert.Equal(SwitchState.Blocked, (await clipboard.ReadAsync(CancellationToken.None)).State);
 
-        // 防火墙写在 HKLM，和登录账户归属无关，不能被连带封锁。
+        // 防火墙与电源类开关写在 HKLM，和登录账户归属无关，不能被连带封锁。
         Assert.IsType<FirewallSwitch>(registry.All[0]);
+        Assert.IsType<HibernateSwitch>(registry.All[2]);
+        Assert.IsType<FastStartupSwitch>(registry.All[3]);
+        Assert.IsType<PowerPlanSwitch>(registry.All[4]);
     }
 
     [Fact]
     public async Task CreateDefault_SameAccount_ReadsUserLevelSwitches()
     {
-        var registry = CreateRegistry();
         var store = new FakeRegistryStore();
         store.SeedDword(SystemProxySwitch.KeyPath, SystemProxySwitch.EnableValueName, 0);
         store.SeedDword(ClipboardHistorySwitch.KeyPath, ClipboardHistorySwitch.ValueName, 1);
 
         var fresh = SwitchRegistry.CreateDefault(
-            new PowerShellRunner(new ProcessRunner()), store, new FakeSettingsNotifier(), SameAccount);
+            new PowerShellRunner(new ProcessRunner()), store, new FakeSettingsNotifier(), new FakePowerCfg(), SameAccount);
         var proxy = fresh.All[1];
-        var clipboard = fresh.All[2];
+        var clipboard = fresh.All[5];
 
         Assert.IsType<SystemProxySwitch>(proxy);
         Assert.IsType<ClipboardHistorySwitch>(clipboard);

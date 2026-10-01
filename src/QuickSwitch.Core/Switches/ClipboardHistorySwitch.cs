@@ -26,7 +26,7 @@ public sealed class ClipboardHistorySwitch : ISwitch
     {
         try
         {
-            var enabled = _registry.ReadDword(KeyPath, ValueName);
+            var enabled = _registry.ReadDword(RegistryScope.CurrentUser, KeyPath, ValueName);
             return Task.FromResult(enabled switch
             {
                 null => new SwitchReadResult(
@@ -52,7 +52,7 @@ public sealed class ClipboardHistorySwitch : ISwitch
 
         try
         {
-            _registry.WriteDword(KeyPath, ValueName, value);
+            _registry.WriteDword(RegistryScope.CurrentUser, KeyPath, ValueName, value);
         }
         catch (Exception ex)
         {

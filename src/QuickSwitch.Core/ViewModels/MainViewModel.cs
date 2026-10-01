@@ -6,13 +6,13 @@ namespace QuickSwitch.Core.ViewModels;
 
 public sealed partial class MainViewModel : ObservableObject
 {
-    public MainViewModel(IEnumerable<SwitchCardViewModel> cards, bool isElevated)
+    public MainViewModel(IEnumerable<ICardViewModel> cards, bool isElevated)
     {
-        Cards = new ObservableCollection<SwitchCardViewModel>(cards);
+        Cards = new ObservableCollection<ICardViewModel>(cards);
         IsElevated = isElevated;
     }
 
-    public ObservableCollection<SwitchCardViewModel> Cards { get; }
+    public ObservableCollection<ICardViewModel> Cards { get; }
 
     public bool IsElevated { get; }
 

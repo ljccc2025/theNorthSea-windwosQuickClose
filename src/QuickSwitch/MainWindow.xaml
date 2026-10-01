@@ -16,7 +16,7 @@
             </CollectionViewSource.GroupDescriptions>
         </CollectionViewSource>
 
-        <DataTemplate x:Key="CardTemplate" DataType="{x:Type vm:SwitchCardViewModel}">
+        <DataTemplate DataType="{x:Type vm:SwitchCardViewModel}">
             <Border Background="#FF24242A" CornerRadius="8" Padding="14,12" Margin="0,0,0,8">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -36,6 +36,31 @@
                                   Style="{StaticResource SwitchToggleStyle}"
                                   IsChecked="{Binding IsOn, Mode=OneWay}"
                                   Command="{Binding ToggleCommand}" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:ChoiceCardViewModel}">
+            <Border Background="#FF24242A" CornerRadius="8" Padding="14,12" Margin="0,0,0,8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                        <TextBlock Text="{Binding Title}" FontSize="15" Foreground="#FFF2F2F5" />
+                        <TextBlock Text="{Binding Subtitle}" FontSize="12" Foreground="#FF9A9AA5"
+                                   TextWrapping="Wrap" Margin="0,4,0,0" />
+                        <TextBlock Text="处理中…" FontSize="12" Foreground="#FF6FA8FF" Margin="0,4,0,0"
+                                   Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}" />
+                    </StackPanel>
+
+                    <ComboBox Grid.Column="1" VerticalAlignment="Center"
+                              Style="{StaticResource ChoiceComboBoxStyle}"
+                              ItemsSource="{Binding Options}"
+                              SelectedItem="{Binding SelectedOption, Mode=TwoWay}"
+                              IsEnabled="{Binding CanSelect}" />
                 </Grid>
             </Border>
         </DataTemplate>
@@ -60,8 +85,7 @@
         </Border>
 
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,12">
-            <ItemsControl ItemsSource="{Binding Source={StaticResource GroupedCards}}"
-                          ItemTemplate="{StaticResource CardTemplate}">
+            <ItemsControl ItemsSource="{Binding Source={StaticResource GroupedCards}}">
                 <ItemsControl.GroupStyle>
                     <GroupStyle>
                         <GroupStyle.HeaderTemplate>

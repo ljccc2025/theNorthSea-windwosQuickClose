@@ -15,10 +15,11 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
 
         var powerShell = new PowerShellRunner(new ProcessRunner());
+        var powerCfg = new PowerCfg(new ProcessRunner());
         var sessionOwner = new SessionOwnerGuard(new WindowsUserSidSource()).Evaluate();
         var registry = SwitchRegistry.CreateDefault(
-            powerShell, new WindowsRegistryStore(), new Win32SettingsNotifier(), sessionOwner);
-        var cards = registry.All.Select(item => new SwitchCardViewModel(item));
+            powerShell, new WindowsRegistryStore(), new Win32SettingsNotifier(), powerCfg, sessionOwner);
+        var cards = registry.All.Select(CardViewModelFactory.Create);
         var viewModel = new MainViewModel(cards, AdminContext.IsElevated());
 
         _window = new MainWindow { DataContext = viewModel };

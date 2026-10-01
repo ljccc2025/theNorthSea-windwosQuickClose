@@ -4,7 +4,7 @@ using QuickSwitch.Core.Switches;
 
 namespace QuickSwitch.Core.ViewModels;
 
-public sealed partial class SwitchCardViewModel : ObservableObject
+public sealed partial class SwitchCardViewModel : ObservableObject, ICardViewModel
 {
     private readonly ISwitch _switch;
     private SwitchState _state = SwitchState.Unknown;

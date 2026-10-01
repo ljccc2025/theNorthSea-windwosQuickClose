@@ -40,8 +40,21 @@ public class MainViewModelTests
 
         Assert.Equal(1, first.ReadCount);
         Assert.Equal(1, second.ReadCount);
-        Assert.True(viewModel.Cards[0].IsOn);
-        Assert.False(viewModel.Cards[1].IsOn);
+        Assert.True(Assert.IsType<SwitchCardViewModel>(viewModel.Cards[0]).IsOn);
+        Assert.False(Assert.IsType<SwitchCardViewModel>(viewModel.Cards[1]).IsOn);
         Assert.False(viewModel.IsRefreshing);
+    }
+
+    [Fact]
+    public async Task RefreshAllAsync_AlsoRefreshesChoiceCard()
+    {
+        var choice = new FakeChoiceSwitch { NextReadState = SwitchState.On, NextSelectedOption = "平衡" };
+        var viewModel = new MainViewModel([new ChoiceCardViewModel(choice)], isElevated: true);
+
+        await viewModel.RefreshAllCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, choice.ReadCount);
+        Assert.Equal(1, choice.ReadSelectedCount);
+        Assert.Equal("平衡", Assert.IsType<ChoiceCardViewModel>(viewModel.Cards[0]).SelectedOption);
     }
 }

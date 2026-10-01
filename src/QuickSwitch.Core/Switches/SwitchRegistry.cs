@@ -20,11 +20,12 @@ public sealed class SwitchRegistry
     public IReadOnlyList<ISwitch> All { get; }
 
     /// 显式 new，不用反射：加开关就是加一行，编译期就能发现名字写错。
-    /// 守卫命中时只封锁用户级开关（HKCU）——防火墙走 HKLM，不受影响。
+    /// 守卫命中时只封锁用户级开关（HKCU）——防火墙与电源类开关走 HKLM，不受影响。
     public static SwitchRegistry CreateDefault(
         PowerShellRunner powerShell,
         IRegistryStore registry,
         ISettingsNotifier notifier,
+        IPowerCfg powerCfg,
         SessionOwnerState sessionOwner)
     {
         ISwitch GuardUserLevel(ISwitch item) =>
@@ -36,6 +37,9 @@ public sealed class SwitchRegistry
         [
             new FirewallSwitch(powerShell),
             GuardUserLevel(new SystemProxySwitch(registry, notifier)),
+            new HibernateSwitch(registry, powerCfg),
+            new FastStartupSwitch(registry),
+            new PowerPlanSwitch(powerCfg),
             GuardUserLevel(new ClipboardHistorySwitch(registry, notifier)),
         ]);
     }

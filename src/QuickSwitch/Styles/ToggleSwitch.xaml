@@ -28,5 +28,27 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <Style x:Key="ChoiceComboBoxStyle" TargetType="ComboBox">
+        <Setter Property="MinWidth" Value="110" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="#FFF2F2F5" />
+        <Setter Property="Background" Value="#FF2E2E36" />
+        <Setter Property="BorderBrush" Value="#FF3A3A42" />
+        <Setter Property="Padding" Value="8,2" />
+        <Setter Property="ItemContainerStyle">
+            <Setter.Value>
+                <Style TargetType="ComboBoxItem">
+                    <Setter Property="Foreground" Value="#FF1B1B1F" />
+                    <Setter Property="Padding" Value="8,4" />
+                </Style>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.4" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
 
 </ResourceDictionary>

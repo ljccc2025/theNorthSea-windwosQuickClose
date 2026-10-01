@@ -27,7 +27,7 @@ public sealed class SystemProxySwitch : ISwitch
     {
         try
         {
-            var enabled = _registry.ReadDword(KeyPath, EnableValueName);
+            var enabled = _registry.ReadDword(RegistryScope.CurrentUser, KeyPath, EnableValueName);
             if (enabled is null)
                 return Task.FromResult(new SwitchReadResult(
                     SwitchState.Unknown, $"注册表里没有 {EnableValueName}，无法判定系统代理状态"));
@@ -35,7 +35,7 @@ public sealed class SystemProxySwitch : ISwitch
             if (enabled == 0)
                 return Task.FromResult(new SwitchReadResult(SwitchState.Off, "系统代理已关闭"));
 
-            var server = _registry.ReadString(KeyPath, ServerValueName);
+            var server = _registry.ReadString(RegistryScope.CurrentUser, KeyPath, ServerValueName);
             return Task.FromResult(new SwitchReadResult(
                 SwitchState.On,
                 string.IsNullOrWhiteSpace(server) ? "系统代理已开启，但未配置代理服务器地址" : $"代理服务器：{server}"));
@@ -58,7 +58,7 @@ public sealed class SystemProxySwitch : ISwitch
 
         try
         {
-            _registry.WriteDword(KeyPath, EnableValueName, value);
+            _registry.WriteDword(RegistryScope.CurrentUser, KeyPath, EnableValueName, value);
         }
         catch (Exception ex)
         {
