@@ -6,7 +6,26 @@ Windows 快捷开关 — 常驻托盘的 Windows 11 系统设置开关面板。
 
 ## 状态
 
-设计阶段完成，尚未实现。里程碑计划见设计规格。
+M0 + M1 已实现：托盘常驻、整体提权、分组卡片列表、防火墙三档开关（含权威回读）。
+其余八个开关按 M2–M4 逐步接入。
+
+## 构建与运行
+
+```powershell
+# 单测（无需管理员权限）
+dotnet test QuickSwitch.slnx
+
+# 调试运行（会弹 UAC —— manifest 声明 requireAdministrator）
+dotnet run --project src/QuickSwitch/QuickSwitch.csproj
+
+# 单文件自包含发布
+dotnet publish src/QuickSwitch/QuickSwitch.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
+```
+
+产物：`src/QuickSwitch/bin/Release/net10.0-windows/win-x64/publish/QuickSwitch.exe`
+
+注意：`Set-NetFirewallProfile -Enabled` 必须传裸字符串 `True`/`False`；
+传 `$true` 会抛 `Invalid cast from 'System.Boolean' to GpoBoolean`。
 
 ## 文档
 
@@ -42,10 +61,3 @@ Windows 快捷开关 — 常驻托盘的 Windows 11 系统设置开关面板。
 | M2 | 代理 + 剪贴板 + 提权归属守卫 |
 | M3 | 休眠 + 快速启动 + 电源计划 |
 | M4 | 实时防护 + 功能组件 + UAC |
-
-## 构建
-
-```
-dotnet build QuickSwitch.sln
-dotnet publish src/QuickSwitch -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
-```
