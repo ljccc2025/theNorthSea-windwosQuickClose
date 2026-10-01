@@ -51,17 +51,38 @@ public class FirewallSwitchTests
         Assert.False(string.IsNullOrWhiteSpace(result.Detail));
     }
 
+    /// 真机写入用例必须诚实：三档不一致时无法用单个布尔往返；未提权时必须断言"失败被如实报告"，
+    /// 而不是靠"写当前同值不触发权限校验"混过成为 no-op。
     [Fact]
-    public async Task ApplyAsync_CurrentState_IsIdempotentAndReadsBack()
+    public async Task ApplyAsync_RealMachine_FlipsAndRestoresOrReportsFailureHonestly()
     {
         var firewall = CreateSwitch();
         var before = await firewall.ReadAsync(CancellationToken.None);
-        Assert.NotEqual(SwitchState.Unknown, before.State);
 
-        var apply = await firewall.ApplyAsync(before.State, CancellationToken.None);
+        if (before.State is not (SwitchState.On or SwitchState.Off))
+            return;
 
-        Assert.True(apply.Success, apply.Error);
-        var after = await firewall.ReadAsync(CancellationToken.None);
-        Assert.Equal(before.State, after.State);
+        var target = before.State == SwitchState.On ? SwitchState.Off : SwitchState.On;
+
+        var apply = await firewall.ApplyAsync(target, CancellationToken.None);
+
+        if (!apply.Success)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(apply.Error), "写入失败必须带回原因");
+
+            var unchanged = await firewall.ReadAsync(CancellationToken.None);
+            Assert.Equal(before.State, unchanged.State);
+            return;
+        }
+
+        try
+        {
+            var after = await firewall.ReadAsync(CancellationToken.None);
+            Assert.Equal(target, after.State);
+        }
+        finally
+        {
+            await firewall.ApplyAsync(before.State, CancellationToken.None);
+        }
     }
 }

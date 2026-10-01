@@ -9,7 +9,9 @@ public sealed class PowerShellRunner
     /// 原生命令（netsh、cmd 等）的退出码不会自动变成 powershell.exe 的退出码，
     /// 末尾显式 exit $LASTEXITCODE 才能把真实退出码传出来；纯 cmdlet 路径
     /// $LASTEXITCODE 为 $null，exit $null 仍按 0 退出。
-    public const string ExitCodePassthrough = "; exit $LASTEXITCODE";
+    /// 必须换行起头：同行拼接时脚本若以 # 注释收尾，整段 passthrough 会被注释吞掉，
+    /// 真实退出码静默退化成 -Command 的通用 1。
+    public const string ExitCodePassthrough = "\r\nexit $LASTEXITCODE";
 
     private readonly IProcessRunner _runner;
 

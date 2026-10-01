@@ -102,6 +102,27 @@ public class PowerShellRunnerTests
     }
 
     [Fact]
+    public async Task RunAsync_ScriptEndingWithComment_StillPropagatesRealExitCode()
+    {
+        var result = await CreateRunner().RunAsync("cmd /c exit 7 # 尾注释", CancellationToken.None);
+
+        Assert.Equal(7, result.ExitCode);
+    }
+
+    [Fact]
+    public async Task RunAsync_TimeoutWithPriorStderr_PutsTimeoutTextOnFirstLine()
+    {
+        var result = await CreateRunner().RunAsync(
+            "[Console]::Error.WriteLine('partial'); Start-Sleep -Seconds 30",
+            CancellationToken.None,
+            TimeSpan.FromSeconds(1));
+
+        Assert.Equal(124, result.ExitCode);
+        Assert.StartsWith("进程超时", result.StandardError);
+        Assert.Contains("partial", result.StandardError);
+    }
+
+    [Fact]
     public async Task RunAsync_Cancellation_KillsProcessTreeBeforeMarkerIsWritten()
     {
         var markerPath = Path.Combine(Path.GetTempPath(), $"quickswitch-cancel-{Guid.NewGuid():N}.txt");
