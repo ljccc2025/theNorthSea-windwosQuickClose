@@ -7,6 +7,11 @@ namespace QuickSwitch.Core.ViewModels;
 public sealed partial class SwitchCardViewModel : ObservableObject, ICardViewModel
 {
     private readonly ISwitch _switch;
+
+    /// 同一张卡上「刷新」与「切换」共用的一把闸门：两者一旦交错，
+    /// 先启动的旧读会在新写之后落地，界面就会显示与真值相反的状态。
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
     private SwitchState _state = SwitchState.Unknown;
 
     public SwitchCardViewModel(ISwitch @switch)
@@ -48,10 +53,26 @@ public sealed partial class SwitchCardViewModel : ObservableObject, ICardViewMod
 
     public async Task RefreshAsync(CancellationToken cancellationToken)
     {
-        var read = await _switch.ReadAsync(cancellationToken).ConfigureAwait(true);
-        State = read.State;
-        IsOn = read.State == SwitchState.On;
-        Subtitle = read.Detail ?? Descriptor.Subtitle;
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(true);
+        try
+        {
+            var read = await _switch.ReadAsync(cancellationToken).ConfigureAwait(true);
+            State = read.State;
+            IsOn = read.State == SwitchState.On;
+            Subtitle = read.Detail ?? Descriptor.Subtitle;
+        }
+        catch (Exception ex)
+        {
+            // 读失败只影响这一张卡：状态退回"未知"，原因留在副标题，进程继续活着。
+            State = SwitchState.Unknown;
+            IsOn = false;
+            Subtitle = $"读取失败：{ex.Message}";
+        }
+        finally
+        {
+            _gate.Release();
+            OnPropertyChanged(nameof(IsOn));
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanToggle))]
@@ -62,9 +83,11 @@ public sealed partial class SwitchCardViewModel : ObservableObject, ICardViewMod
 
         var target = State == SwitchState.On ? SwitchState.Off : SwitchState.On;
 
-        IsBusy = true;
+        await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
+            IsBusy = true;
+
             var apply = await _switch.ApplyAsync(target, CancellationToken.None).ConfigureAwait(true);
             var read = await _switch.ReadAsync(CancellationToken.None).ConfigureAwait(true);
 
@@ -74,9 +97,16 @@ public sealed partial class SwitchCardViewModel : ObservableObject, ICardViewMod
                 ? read.Detail ?? Descriptor.Subtitle
                 : $"操作失败：{apply.Error ?? ErrorTextFallback}";
         }
+        catch (Exception ex)
+        {
+            // 命令里逃出去的异常会被 AsyncRelayCommand 抛到 UI 线程击毙整个托盘进程。
+            // 这里就地收成一条副标题，界面留在旧状态（既不知道真值，就不假装知道）。
+            Subtitle = $"操作失败：{ex.Message}";
+        }
         finally
         {
             IsBusy = false;
+            _gate.Release();
             // ToggleButton 点击时会把 IsChecked 写成局部值。显式重发通知，
             // 让 OneWay 绑定把权威状态重新推回视觉层；操作失败时开关自动弹回。
             OnPropertyChanged(nameof(IsOn));

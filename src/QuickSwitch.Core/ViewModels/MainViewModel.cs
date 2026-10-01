@@ -30,7 +30,16 @@ public sealed partial class MainViewModel : ObservableObject
         try
         {
             foreach (var card in Cards)
-                await card.RefreshAsync(CancellationToken.None).ConfigureAwait(true);
+            {
+                try
+                {
+                    await card.RefreshAsync(CancellationToken.None).ConfigureAwait(true);
+                }
+                catch (Exception)
+                {
+                    // 单卡失败不拖垮其余卡片；卡片内部已把原因写进副标题，这里是最后一道隔离。
+                }
+            }
         }
         finally
         {

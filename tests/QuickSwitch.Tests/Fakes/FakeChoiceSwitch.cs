@@ -16,6 +16,8 @@ internal sealed class FakeChoiceSwitch : IChoiceSwitch
 
     public SwitchApplyResult SelectResult { get; set; } = SwitchApplyResult.Ok();
 
+    public Exception? SelectException { get; set; }
+
     /// 三选一开关的布尔写入通道；真实现里恒失败，测试按需覆盖。
     public SwitchApplyResult ApplyResult { get; set; } = SwitchApplyResult.Ok();
 
@@ -50,6 +52,8 @@ internal sealed class FakeChoiceSwitch : IChoiceSwitch
     {
         SelectCount++;
         LastSelectedOption = option;
+
+        if (SelectException is not null) throw SelectException;
 
         if (ApplyOnSelect && SelectResult.Success)
         {

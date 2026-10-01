@@ -11,6 +11,10 @@ public sealed partial class ChoiceCardViewModel : ObservableObject, ICardViewMod
     private const string ErrorTextFallback = "未知错误";
 
     private readonly IChoiceSwitch _switch;
+
+    /// 与 SwitchCardViewModel 同款闸门：刷新与选择不许交错，否则旧读覆盖新写的真值。
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
     private SwitchState _state = SwitchState.Unknown;
     private bool _suppressSelectionCallback;
 
@@ -59,10 +63,23 @@ public sealed partial class ChoiceCardViewModel : ObservableObject, ICardViewMod
 
     public async Task RefreshAsync(CancellationToken cancellationToken)
     {
-        var read = await _switch.ReadAsync(cancellationToken).ConfigureAwait(true);
-        var selected = await _switch.ReadSelectedAsync(cancellationToken).ConfigureAwait(true);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(true);
+        try
+        {
+            var read = await _switch.ReadAsync(cancellationToken).ConfigureAwait(true);
+            var selected = await _switch.ReadSelectedAsync(cancellationToken).ConfigureAwait(true);
 
-        Apply(read, selected);
+            Apply(read, selected);
+        }
+        catch (Exception ex)
+        {
+            State = SwitchState.Unknown;
+            Subtitle = $"读取失败：{ex.Message}";
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanSelect))]
@@ -71,18 +88,26 @@ public sealed partial class ChoiceCardViewModel : ObservableObject, ICardViewMod
         // 命令本身受 CanExecute 保护，但测试会直接调用本方法，守卫不能只靠命令层。
         if (!CanSelect || string.IsNullOrEmpty(option)) return;
 
-        IsBusy = true;
+        await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
+            IsBusy = true;
+
             var apply = await _switch.SelectAsync(option, CancellationToken.None).ConfigureAwait(true);
             var read = await _switch.ReadAsync(CancellationToken.None).ConfigureAwait(true);
             var selected = await _switch.ReadSelectedAsync(CancellationToken.None).ConfigureAwait(true);
 
             Apply(read, selected, apply.Success ? null : $"操作失败：{apply.Error ?? ErrorTextFallback}");
         }
+        catch (Exception ex)
+        {
+            // 逃到 UI 线程的异常会击毙托盘进程，就地收成一条副标题。
+            Subtitle = $"操作失败：{ex.Message}";
+        }
         finally
         {
             IsBusy = false;
+            _gate.Release();
         }
     }
 

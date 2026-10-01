@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using QuickSwitch.Core.Infrastructure;
 using QuickSwitch.Core.Switches;
 using QuickSwitch.Core.ViewModels;
@@ -118,5 +119,66 @@ public class SwitchCardViewModelTests
         await card.ToggleAsync();
 
         Assert.Null(inner.LastTarget);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_WhileToggleIsInFlight_DoesNotOverwriteAuthoritativeState()
+    {
+        var fake = new FakeSwitch { NextReadState = SwitchState.Off };
+        var card = new SwitchCardViewModel(fake);
+        await card.RefreshAsync(CancellationToken.None);
+
+        var staleRead = new TaskCompletionSource();
+        fake.NextReadGate = staleRead;
+
+        var refreshing = card.RefreshAsync(CancellationToken.None);
+        var toggling = card.ToggleAsync();
+
+        staleRead.SetResult();
+
+        await refreshing;
+        await toggling;
+
+        Assert.Equal(SwitchState.On, fake.LastTarget);
+        Assert.Equal(SwitchState.On, card.State);
+        Assert.True(card.IsOn);
+        Assert.False(card.IsBusy);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_WhenReadThrows_ReportsErrorInsteadOfEscaping()
+    {
+        var fake = new FakeSwitch
+        {
+            NextReadState = SwitchState.On,
+            ReadException = new InvalidOperationException("管道已关闭"),
+        };
+        var card = new SwitchCardViewModel(fake);
+
+        await card.RefreshAsync(CancellationToken.None);
+
+        Assert.Equal(SwitchState.Unknown, card.State);
+        Assert.False(card.IsOn);
+        Assert.False(card.CanToggle);
+        Assert.Equal("读取失败：管道已关闭", card.Subtitle);
+    }
+
+    [Fact]
+    public async Task ToggleAsync_WhenApplyThrows_ReportsErrorAndBouncesBack()
+    {
+        var fake = new FakeSwitch
+        {
+            NextReadState = SwitchState.On,
+            ApplyException = new Win32Exception("无法启动进程 'powershell'"),
+        };
+        var card = new SwitchCardViewModel(fake);
+        await card.RefreshAsync(CancellationToken.None);
+
+        await card.ToggleAsync();
+
+        Assert.Equal(SwitchState.On, card.State);
+        Assert.True(card.IsOn);
+        Assert.Equal("操作失败：无法启动进程 'powershell'", card.Subtitle);
+        Assert.False(card.IsBusy);
     }
 }

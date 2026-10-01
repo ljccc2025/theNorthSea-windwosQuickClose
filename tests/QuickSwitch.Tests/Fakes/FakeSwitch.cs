@@ -16,16 +16,39 @@ internal sealed class FakeSwitch : ISwitch
 
     public int ReadCount { get; private set; }
 
-    public Task<SwitchReadResult> ReadAsync(CancellationToken cancellationToken)
+    /// 设了就只卡住接下来那一次读：真值在进闸门前就抓在手里，放行后返回的是那一刻的旧值。
+    public TaskCompletionSource? NextReadGate { get; set; }
+
+    public Exception? ReadException { get; set; }
+
+    public Exception? ApplyException { get; set; }
+
+    public async Task<SwitchReadResult> ReadAsync(CancellationToken cancellationToken)
     {
         ReadCount++;
-        return Task.FromResult(new SwitchReadResult(NextReadState, NextReadDetail));
+        var state = NextReadState;
+        var detail = NextReadDetail;
+
+        var gate = NextReadGate;
+        if (gate is not null)
+        {
+            NextReadGate = null;
+            await gate.Task.ConfigureAwait(false);
+        }
+
+        if (ReadException is not null) throw ReadException;
+
+        return new SwitchReadResult(state, detail);
     }
 
     public Task<SwitchApplyResult> ApplyAsync(SwitchState target, CancellationToken cancellationToken)
     {
         LastTarget = target;
+
+        if (ApplyException is not null) throw ApplyException;
+
         if (ApplyResult.Success) NextReadState = target;
+
         return Task.FromResult(ApplyResult);
     }
 }
