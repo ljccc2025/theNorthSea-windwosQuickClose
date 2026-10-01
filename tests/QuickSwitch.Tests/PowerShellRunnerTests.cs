@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using QuickSwitch.Core.Infrastructure;
 
 namespace QuickSwitch.Tests;
@@ -43,5 +44,84 @@ public class PowerShellRunnerTests
 
         Assert.Equal("out", result.StandardOutput);
         Assert.Contains("err", result.StandardError);
+    }
+
+    [Fact]
+    public async Task RunAsync_NativeCommandNonZeroExit_PropagatesRealExitCode()
+    {
+        var result = await CreateRunner().RunAsync("cmd /c exit 7", CancellationToken.None);
+
+        Assert.Equal(7, result.ExitCode);
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task RunAsync_NativeCommandNonZeroExit_KeepsStdoutOfFollowingCmdlet()
+    {
+        var result = await CreateRunner().RunAsync("cmd /c exit 7; Write-Output tail", CancellationToken.None);
+
+        Assert.Equal(7, result.ExitCode);
+        Assert.Contains("tail", result.StandardOutput);
+    }
+
+    [Fact]
+    public async Task RunAsync_PureCmdletWithoutNativeCommand_ExitsZero()
+    {
+        var result = await CreateRunner().RunAsync("Write-Output ok", CancellationToken.None);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(result.Succeeded, result.StandardError);
+    }
+
+    [Fact]
+    public async Task RunAsync_ScriptWithSpacesAndMetaCharacters_IsPassedVerbatim()
+    {
+        const string payload = "a b; c|d & e > f";
+
+        var result = await CreateRunner().RunAsync($"Write-Output '{payload}'", CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.StandardError);
+        Assert.Equal(payload, result.StandardOutput);
+    }
+
+    [Fact]
+    public async Task RunAsync_Timeout_KillsProcessTreeAndReturnsStructuredResult()
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        var result = await CreateRunner().RunAsync(
+            "Start-Sleep -Seconds 30",
+            CancellationToken.None,
+            TimeSpan.FromSeconds(1));
+
+        stopwatch.Stop();
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5), $"超时未生效，耗时 {stopwatch.Elapsed}");
+        Assert.False(result.Succeeded);
+        Assert.Equal(124, result.ExitCode);
+        Assert.Contains("超时", result.StandardError);
+    }
+
+    [Fact]
+    public async Task RunAsync_Cancellation_KillsProcessTreeBeforeMarkerIsWritten()
+    {
+        var markerPath = Path.Combine(Path.GetTempPath(), $"quickswitch-cancel-{Guid.NewGuid():N}.txt");
+        var script = $"Start-Sleep -Seconds 3; Set-Content -LiteralPath '{markerPath}' -Value alive";
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => CreateRunner().RunAsync(script, cts.Token, TimeSpan.FromSeconds(30)));
+
+            await Task.Delay(TimeSpan.FromSeconds(4));
+
+            Assert.False(File.Exists(markerPath), "子进程未被杀死：标记文件已被写出");
+        }
+        finally
+        {
+            if (File.Exists(markerPath))
+                File.Delete(markerPath);
+        }
     }
 }
