@@ -30,7 +30,8 @@ public sealed class SystemProxySwitch : ISwitch
             var enabled = _registry.ReadDword(RegistryScope.CurrentUser, KeyPath, EnableValueName);
             if (enabled is null)
                 return Task.FromResult(new SwitchReadResult(
-                    SwitchState.Unknown, $"注册表里没有 {EnableValueName}，无法判定系统代理状态"));
+                    // 值不存在 = 没启用过代理 = 系统默认（关）。报 Unknown 会让这张卡永远点不动。
+                    SwitchState.Off, $"未配置 {EnableValueName}，按系统默认（关闭）处理"));
 
             if (enabled == 0)
                 return Task.FromResult(new SwitchReadResult(SwitchState.Off, "系统代理已关闭"));

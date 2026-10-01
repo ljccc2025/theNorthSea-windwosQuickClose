@@ -14,7 +14,27 @@ public sealed class SwitchRegistry
         if (duplicate is not null)
             throw new ArgumentException($"开关 Id 重复：{duplicate.Key}", nameof(switches));
 
+        foreach (var item in items)
+            Validate(item.Descriptor);
+
         All = items;
+    }
+
+    /// 规格 §8 的自检：加开关时写漏一处，编译期发现不了，但这里能挡住。
+    private static void Validate(SwitchDescriptor descriptor)
+    {
+        if (string.IsNullOrWhiteSpace(descriptor.Id))
+            throw new ArgumentException("开关 Id 不能为空。", nameof(descriptor));
+
+        if (string.IsNullOrWhiteSpace(descriptor.Title))
+            throw new ArgumentException($"开关 {descriptor.Id} 的标题不能为空。", nameof(descriptor));
+
+        if (string.IsNullOrWhiteSpace(descriptor.Group))
+            throw new ArgumentException($"开关 {descriptor.Id} 的分组不能为空。", nameof(descriptor));
+
+        // 破坏性开关必须自带确认文案：默认兜底文案太含糊，用户看不出代价。
+        if (descriptor.IsDestructive && string.IsNullOrWhiteSpace(descriptor.ConfirmText))
+            throw new ArgumentException($"破坏性开关 {descriptor.Id} 必须给出 ConfirmText。", nameof(descriptor));
     }
 
     public IReadOnlyList<ISwitch> All { get; }

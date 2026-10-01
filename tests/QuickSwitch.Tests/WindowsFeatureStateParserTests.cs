@@ -29,5 +29,25 @@ public class WindowsFeatureStateParserTests
     {
         Assert.Contains("重启", WindowsFeatureStateParser.Parse("WSL", "EnablePending").Detail!);
     }
+
+    [Theory]
+    [InlineData("EnablePending", true, "启用")]
+    [InlineData("DisablePending", false, "禁用")]
+    public void Parse_PendingState_CarriesDirection(string output, bool expectedPendingOn, string expectedWord)
+    {
+        var result = WindowsFeatureStateParser.Parse("Hyper-V", output);
+
+        Assert.Equal(SwitchState.PendingRestart, result.State);
+        Assert.Equal(expectedPendingOn, result.PendingOn);
+        Assert.Contains(expectedWord, result.Detail!);
+    }
+
+    [Theory]
+    [InlineData("Enabled")]
+    [InlineData("Disabled")]
+    public void Parse_SettledState_HasNoPendingDirection(string output)
+    {
+        Assert.Null(WindowsFeatureStateParser.Parse("Hyper-V", output).PendingOn);
+    }
 }
 

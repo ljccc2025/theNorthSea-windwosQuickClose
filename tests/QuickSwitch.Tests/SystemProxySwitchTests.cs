@@ -29,12 +29,13 @@ public class SystemProxySwitchTests
     }
 
     [Fact]
-    public async Task Read_ProxyEnableMissing_IsUnknown()
+    public async Task Read_ProxyEnableMissing_IsOffBySystemDefault()
     {
         var result = await CreateSwitch().ReadAsync(CancellationToken.None);
 
-        Assert.Equal(SwitchState.Unknown, result.State);
+        Assert.Equal(SwitchState.Off, result.State);
         Assert.Contains("ProxyEnable", result.Detail!);
+        Assert.Contains("按系统默认", result.Detail!);
     }
 
     [Fact]

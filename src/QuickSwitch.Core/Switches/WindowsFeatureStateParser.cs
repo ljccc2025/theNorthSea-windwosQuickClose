@@ -13,8 +13,8 @@ public static class WindowsFeatureStateParser
         {
             "Enabled" => new SwitchReadResult(SwitchState.On, $"{featureName} 已启用"),
             "Disabled" => new SwitchReadResult(SwitchState.Off, $"{featureName} 已禁用"),
-            "EnablePending" => new SwitchReadResult(SwitchState.PendingRestart, $"{featureName} 将于重启后启用"),
-            "DisablePending" => new SwitchReadResult(SwitchState.PendingRestart, $"{featureName} 将于重启后禁用"),
+            "EnablePending" => new SwitchReadResult(SwitchState.PendingRestart, $"{featureName} 将于重启后启用", PendingOn: true),
+            "DisablePending" => new SwitchReadResult(SwitchState.PendingRestart, $"{featureName} 将于重启后禁用", PendingOn: false),
             _ => new SwitchReadResult(SwitchState.Unknown, $"无法识别的功能状态：{state}"),
         };
     }

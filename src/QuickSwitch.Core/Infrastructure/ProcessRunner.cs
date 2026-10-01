@@ -19,8 +19,10 @@ public sealed class ProcessRunner : IProcessRunner
     /// 默认 60 秒，dism / 功能组件类另传 600 秒）。
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(60);
 
-    /// 杀完进程树后等读流回归的上界：杀不干净时管道不会 EOF，读任务永远不完成。
-    private static readonly TimeSpan PostKillReadTimeout = TimeSpan.FromSeconds(5);
+    /// 读流回归的上界。两个地方都要它：杀掉进程树后（杀不干净时管道不会 EOF），
+    /// 以及正常退出后（孙进程继承了管道写句柄时，ReadToEndAsync 永远等不到 EOF，
+    /// 那张卡就会永久停在"处理中…"并占住闸门）。
+    private static readonly TimeSpan StreamDrainTimeout = TimeSpan.FromSeconds(5);
 
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
@@ -88,8 +90,8 @@ public sealed class ProcessRunner : IProcessRunner
 
         return new ProcessResult(
             process.ExitCode,
-            (await stdout.ConfigureAwait(false)).TrimEnd('\r', '\n'),
-            (await stderr.ConfigureAwait(false)).TrimEnd('\r', '\n'));
+            (await SafeReadAsync(stdout).ConfigureAwait(false)).TrimEnd('\r', '\n'),
+            (await SafeReadAsync(stderr).ConfigureAwait(false)).TrimEnd('\r', '\n'));
     }
 
     private static void KillTree(Process process)
@@ -114,7 +116,7 @@ public sealed class ProcessRunner : IProcessRunner
     {
         try
         {
-            var completed = await Task.WhenAny(readTask, Task.Delay(PostKillReadTimeout)).ConfigureAwait(false);
+            var completed = await Task.WhenAny(readTask, Task.Delay(StreamDrainTimeout)).ConfigureAwait(false);
             if (completed != readTask)
                 return string.Empty;
 

@@ -29,8 +29,10 @@ public sealed class ClipboardHistorySwitch : ISwitch
             var enabled = _registry.ReadDword(RegistryScope.CurrentUser, KeyPath, ValueName);
             return Task.FromResult(enabled switch
             {
+                // 值不存在 = 从没启用过 = 系统默认（关）。报 Unknown 会让这张卡永远点不动，
+                // 而这恰恰是新账户第一次想开剪贴板历史时的情况。
                 null => new SwitchReadResult(
-                    SwitchState.Unknown, $"注册表里没有 {ValueName}，无法判定剪贴板历史状态"),
+                    SwitchState.Off, $"未配置 {ValueName}，按系统默认（关闭）处理"),
                 0 => new SwitchReadResult(SwitchState.Off, "剪贴板历史已关闭"),
                 _ => new SwitchReadResult(SwitchState.On, "剪贴板历史已开启，按 Win+V 查看"),
             });

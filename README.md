@@ -6,16 +6,38 @@ Windows 快捷开关 — 常驻托盘的 Windows 11 系统设置开关面板。
 
 ## 状态
 
-M0–M4 全部实现，11 张开关卡片，245 个单测全绿：
+M0–M4 全部实现，11 张开关卡片，265 个单测全绿：
 
 - 托盘常驻、启动即整体提权（`app.manifest` 的 `requireAdministrator`，全程只弹一次 UAC）
-- 分组卡片列表（安全 / 网络 / 电源 / 系统），写操作乐观按钮 + 权威回读 + 失败弹回
+- 分组卡片列表（安全 / 网络 / 电源 / 系统），写操作悲观按钮 + 权威回读 + 失败弹回
 - 防火墙三档统一开关、系统代理、剪贴板历史、休眠、快速启动、电源计划（三选一）
 - 实时防护（篡改防护开启时显示"被阻止"并说明原因）、UAC、Windows 功能组件（Hyper-V / WSL / 虚拟机平台）
 - 破坏性开关（UAC、功能组件）关闭前弹确认框；需重启的开关成功后亮"重启后生效"徽标
 - 提权归属守卫：以其他管理员账户运行时，封锁写 HKCU 的两张用户级卡片
+- 托盘菜单第一项是防火墙一键开关，文案跟随卡片真实状态刷新（不设子菜单：一次点击优于两次）
 
-已实现但**尚未在提权环境下做人工验收**：见 [人工验收清单](docs/manual-verification.md)。
+## 验证
+
+两层，都可重跑：
+
+```powershell
+# 1. 单测（无需管理员权限，含真机只读用例：11 张卡读路径、powercfg 中文解码、注册表读写）
+dotnet test QuickSwitch.slnx
+
+# 2. UIA 验收台（真窗口、真鼠标点击、真 UIA 调用，逐条断言"UI 上看到的 == 内存里的 == 系统真值"）
+dotnet build tools/UiSmoke/UiSmoke.csproj -v q
+tools/UiSmoke/bin/Debug/net10.0-windows/UiSmoke.exe        # 退出码 = FAIL 数
+tools/UiSmoke/bin/Debug/net10.0-windows/UiSmoke.exe --dump # 另打一份 UIA 树
+
+# 3. 提权路径（会弹一次 UAC；跑同一套验收台，自动切换成"必须真写"的断言）
+powershell -ExecutionPolicy Bypass -File tools/verify-elevated.ps1
+```
+
+未提权下的最近一次结果：`PASS=30 FAIL=0 SKIP=2`（SKIP = 需要提权才能进入的 Hyper-V 确认框、Win11 溢出面板里的托盘图标）。覆盖：11 张卡的标题/分组/显示顺序/副标题逐字一致、开关视觉状态 == ViewModel == 系统真值、未知与封锁态禁用、真鼠标点防火墙在未提权时给出系统原文且真值不动、剪贴板历史真写并还原、UAC 确认框文案与取消分支、UIA `Toggle()` 真触发命令、托盘菜单项文案与点击链路、关窗隐藏而进程存活。
+
+提权下的额外断言（由 `tools/verify-elevated.ps1` 跑）：提权徽标 = 管理员模式、防火墙三档真开 → 再点真还原、三张功能组件卡读到真状态而不是 Unknown、托盘防火墙项真开真还原。
+
+逐步人工对照清单见 [人工验收清单](docs/manual-verification.md)。
 
 ## 构建与运行
 
@@ -44,6 +66,7 @@ dotnet publish src/QuickSwitch/QuickSwitch.csproj -c Release -r win-x64 --self-c
 - [M0 + M1 实现计划](docs/superpowers/plans/2026-10-01-windows-quickswitch-m0-m1.md)
 - [M2 实现计划](docs/superpowers/plans/2026-10-01-windows-quickswitch-m2.md)
 - [人工验收清单](docs/manual-verification.md)
+- UIA 验收台源码：[tools/UiSmoke](tools/UiSmoke)
 
 ## 开关
 

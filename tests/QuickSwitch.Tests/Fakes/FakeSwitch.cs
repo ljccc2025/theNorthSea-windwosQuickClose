@@ -10,6 +10,12 @@ internal sealed class FakeSwitch : ISwitch
 
     public string? NextReadDetail { get; set; }
 
+    /// 只在 NextReadState 为 PendingRestart 时有意义：待生效的改动是开还是关。
+    public bool? NextReadPendingOn { get; set; }
+
+    /// 置真则 ApplyAsync 不改写回读状态，用来模拟"写了等于没写"的幂等重写。
+    public bool ApplyIsNoOp { get; set; }
+
     public SwitchApplyResult ApplyResult { get; set; } = SwitchApplyResult.Ok();
 
     public SwitchState? LastTarget { get; private set; }
@@ -38,7 +44,7 @@ internal sealed class FakeSwitch : ISwitch
 
         if (ReadException is not null) throw ReadException;
 
-        return new SwitchReadResult(state, detail);
+        return new SwitchReadResult(state, detail, NextReadPendingOn);
     }
 
     public Task<SwitchApplyResult> ApplyAsync(SwitchState target, CancellationToken cancellationToken)
@@ -47,7 +53,7 @@ internal sealed class FakeSwitch : ISwitch
 
         if (ApplyException is not null) throw ApplyException;
 
-        if (ApplyResult.Success) NextReadState = target;
+        if (ApplyResult.Success && !ApplyIsNoOp) NextReadState = target;
 
         return Task.FromResult(ApplyResult);
     }

@@ -7,13 +7,17 @@ namespace QuickSwitch.Tests;
 /// 只读，不改系统；未提权时部分卡片必然读不到，但**绝不能抛异常**。
 public class RealMachineReadSmokeTests
 {
-    private static SwitchRegistry CreateRegistry() =>
-        SwitchRegistry.CreateDefault(
-            new PowerShellRunner(new ProcessRunner()),
+    private static SwitchRegistry CreateRegistry()
+    {
+        var powerShell = new PowerShellRunner(new ProcessRunner());
+
+        return SwitchRegistry.CreateDefault(
+            powerShell,
             new WindowsRegistryStore(),
             new Win32SettingsNotifier(),
-            new PowerCfg(new ProcessRunner()),
+            new PowerCfg(powerShell),
             new SessionOwnerGuard(new WindowsUserSidSource()).Evaluate());
+    }
 
     [Fact]
     public async Task ReadAll_OnRealMachine_NeverThrowsAndAlwaysExplains()

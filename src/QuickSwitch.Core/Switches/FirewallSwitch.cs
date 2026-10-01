@@ -4,6 +4,8 @@ namespace QuickSwitch.Core.Switches;
 
 public sealed class FirewallSwitch : ISwitch
 {
+    public const string Id = "firewall";
+
     public const string ReadScript =
         "(Get-NetFirewallProfile -Profile Domain,Private,Public | ForEach-Object { '{0}={1}' -f $_.Name, $_.Enabled }) -join ';'";
 
@@ -12,7 +14,7 @@ public sealed class FirewallSwitch : ISwitch
     public FirewallSwitch(PowerShellRunner powerShell) => _powerShell = powerShell;
 
     public SwitchDescriptor Descriptor { get; } = new(
-        Id: "firewall",
+        Id: Id,
         Group: SwitchGroup.Security,
         Title: "Windows 防火墙",
         Subtitle: "域 / 专用 / 公用 三档统一开关");

@@ -120,4 +120,44 @@ public class SwitchRegistryTests
         Assert.Throws<ArgumentException>(() => new SwitchRegistry(
             [new FirewallSwitch(powerShell), new FirewallSwitch(powerShell)]));
     }
+
+    [Theory]
+    [InlineData("", "标题", SwitchGroup.Security)]
+    [InlineData("id", "", SwitchGroup.Security)]
+    [InlineData("id", "标题", "")]
+    public void Constructor_IncompleteDescriptor_Throws(string id, string title, string group)
+    {
+        var fake = new FakeSwitch { Descriptor = new SwitchDescriptor(id, group, title, "副标题") };
+
+        Assert.Throws<ArgumentException>(() => new SwitchRegistry([fake]));
+    }
+
+    [Fact]
+    public void Constructor_DestructiveWithoutConfirmText_Throws()
+    {
+        var fake = new FakeSwitch
+        {
+            Descriptor = new SwitchDescriptor(
+                "destructive", SwitchGroup.Security, "破坏性开关", "副标题", IsDestructive: true),
+        };
+
+        var error = Assert.Throws<ArgumentException>(() => new SwitchRegistry([fake]));
+
+        Assert.Contains("ConfirmText", error.Message);
+    }
+
+    [Fact]
+    public void Constructor_DestructiveWithConfirmText_IsAccepted()
+    {
+        var fake = new FakeSwitch
+        {
+            Descriptor = new SwitchDescriptor(
+                "destructive", SwitchGroup.Security, "破坏性开关", "副标题",
+                IsDestructive: true, ConfirmText: "确定吗？"),
+        };
+
+        var registry = new SwitchRegistry([fake]);
+
+        Assert.Single(registry.All);
+    }
 }

@@ -64,7 +64,7 @@ public sealed partial class SwitchCardViewModel : ObservableObject, ICardViewMod
         {
             var read = await _switch.ReadAsync(cancellationToken).ConfigureAwait(true);
             State = read.State;
-            IsOn = read.State == SwitchState.On;
+            IsOn = IsEffectivelyOn(read);
             Subtitle = read.Detail ?? Descriptor.Subtitle;
             ShowRestartBadge = read.State == SwitchState.PendingRestart;
         }
@@ -88,26 +88,35 @@ public sealed partial class SwitchCardViewModel : ObservableObject, ICardViewMod
         // 命令本身受 CanExecute 保护，但测试会直接调用本方法，守卫不能只靠命令层。
         if (!CanToggle) return;
 
-        var target = State == SwitchState.On ? SwitchState.Off : SwitchState.On;
+        var target = IsOn ? SwitchState.Off : SwitchState.On;
 
         // 关闭破坏性开关（UAC、功能组件）先过确认；用户点取消就当没点过。
         if (target == SwitchState.Off && Descriptor.IsDestructive && !ConfirmDestructive())
+        {
+            // 点击本身已经把 IsChecked 写成局部值，而绑定是 OneWay、不会自己回写。
+            // 取消时若不显式推回，界面就停在"已关闭"而真值仍是开——那是说谎。
+            OnPropertyChanged(nameof(IsOn));
             return;
+        }
 
         await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             IsBusy = true;
 
+            var before = State;
             var apply = await _switch.ApplyAsync(target, CancellationToken.None).ConfigureAwait(true);
             var read = await _switch.ReadAsync(CancellationToken.None).ConfigureAwait(true);
 
             State = read.State;
-            IsOn = read.State == SwitchState.On;
+            IsOn = IsEffectivelyOn(read);
             Subtitle = apply.Success
                 ? read.Detail ?? Descriptor.Subtitle
                 : $"操作失败：{apply.Error ?? ErrorTextFallback}";
-            ShowRestartBadge = apply.Success && Descriptor.RequiresRestart;
+            // 只有这次点击真的动了状态才亮徽标：幂等重写（点完还是原样）不该亮。
+            ShowRestartBadge = apply.Success
+                && Descriptor.RequiresRestart
+                && (read.State != before || read.State == SwitchState.PendingRestart);
         }
         catch (Exception ex)
         {
@@ -124,6 +133,12 @@ public sealed partial class SwitchCardViewModel : ObservableObject, ICardViewMod
             OnPropertyChanged(nameof(IsOn));
         }
     }
+
+    /// 「重启后生效」的开关，IsOn 的含义是"用户要它是开的"：EnablePending 还没落到系统上，
+    /// 但界面该照用户意图显示成开，否则待生效的启用会渲染成关，再点一次只会重复启用。
+    private static bool IsEffectivelyOn(SwitchReadResult read) =>
+        read.State == SwitchState.On
+        || (read.State == SwitchState.PendingRestart && read.PendingOn == true);
 
     private bool ConfirmDestructive()
     {

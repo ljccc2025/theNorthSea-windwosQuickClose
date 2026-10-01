@@ -301,6 +301,93 @@ public class SwitchCardViewModelTests
         Assert.Equal("操作失败：UAC 被策略锁定。", card.Subtitle);
     }
 
+    [Fact]
+    public async Task ToggleAsync_DestructiveOff_WhenUserCancels_PushesAuthoritativeStateBack()
+    {
+        var fake = DestructiveSwitch(SwitchState.On);
+        var card = new SwitchCardViewModel(fake, new FakeConfirmationPrompt { Answer = false });
+        await card.RefreshAsync(CancellationToken.None);
+
+        var notified = new List<string>();
+        card.PropertyChanged += (_, args) => notified.Add(args.PropertyName ?? string.Empty);
+
+        await card.ToggleAsync();
+
+        Assert.Contains(nameof(SwitchCardViewModel.IsOn), notified);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_WhenPendingRestartEnable_ShowsOnWithBadge()
+    {
+        var fake = new FakeSwitch
+        {
+            Descriptor = new SwitchDescriptor("slow", SwitchGroup.System, "慢开关", "要重启", RequiresRestart: true),
+            NextReadState = SwitchState.PendingRestart,
+            NextReadDetail = "Hyper-V 将于重启后启用",
+            NextReadPendingOn = true,
+        };
+        var card = new SwitchCardViewModel(fake);
+
+        await card.RefreshAsync(CancellationToken.None);
+
+        Assert.True(card.IsOn);
+        Assert.True(card.ShowRestartBadge);
+        Assert.True(card.CanToggle);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_WhenPendingRestartDisable_ShowsOffWithBadge()
+    {
+        var fake = new FakeSwitch
+        {
+            Descriptor = new SwitchDescriptor("slow", SwitchGroup.System, "慢开关", "要重启", RequiresRestart: true),
+            NextReadState = SwitchState.PendingRestart,
+            NextReadPendingOn = false,
+        };
+        var card = new SwitchCardViewModel(fake);
+
+        await card.RefreshAsync(CancellationToken.None);
+
+        Assert.False(card.IsOn);
+        Assert.True(card.ShowRestartBadge);
+    }
+
+    [Fact]
+    public async Task ToggleAsync_PendingRestartEnable_TargetsOffSoItCanBeUndone()
+    {
+        var fake = new FakeSwitch
+        {
+            Descriptor = new SwitchDescriptor("slow", SwitchGroup.System, "慢开关", "要重启", RequiresRestart: true),
+            NextReadState = SwitchState.PendingRestart,
+            NextReadPendingOn = true,
+        };
+        var card = new SwitchCardViewModel(fake);
+        await card.RefreshAsync(CancellationToken.None);
+
+        await card.ToggleAsync();
+
+        Assert.Equal(SwitchState.Off, fake.LastTarget);
+    }
+
+    [Fact]
+    public async Task ToggleAsync_IdempotentRewrite_DoesNotLightBadge()
+    {
+        var fake = new FakeSwitch
+        {
+            Descriptor = new SwitchDescriptor("slow", SwitchGroup.System, "慢开关", "要重启", RequiresRestart: true),
+            NextReadState = SwitchState.On,
+            ApplyIsNoOp = true,
+        };
+        var card = new SwitchCardViewModel(fake);
+        await card.RefreshAsync(CancellationToken.None);
+
+        await card.ToggleAsync();
+
+        Assert.Equal(SwitchState.On, card.State);
+        Assert.True(card.IsOn);
+        Assert.False(card.ShowRestartBadge);
+    }
+
     private static FakeSwitch DestructiveSwitch(SwitchState state) => new()
     {
         Descriptor = new SwitchDescriptor(

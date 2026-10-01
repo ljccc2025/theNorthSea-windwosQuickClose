@@ -46,6 +46,32 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public async Task RefreshAllAsync_StartsEveryCardBeforeAnyOfThemFinishes()
+    {
+        var slowestGate = new TaskCompletionSource();
+        var quickGate = new TaskCompletionSource();
+        var slowest = new FakeSwitch { NextReadGate = slowestGate };
+        var quick = new FakeSwitch { NextReadGate = quickGate };
+        var viewModel = new MainViewModel(
+            [new SwitchCardViewModel(slowest), new SwitchCardViewModel(quick)],
+            isElevated: true);
+
+        var refresh = viewModel.RefreshAllCommand.ExecuteAsync(null);
+
+        await Task.Delay(100);
+
+        Assert.Equal(1, slowest.ReadCount);
+        Assert.Equal(1, quick.ReadCount);
+        Assert.True(viewModel.IsRefreshing);
+
+        quickGate.SetResult();
+        slowestGate.SetResult();
+        await refresh;
+
+        Assert.False(viewModel.IsRefreshing);
+    }
+
+    [Fact]
     public async Task RefreshAllAsync_AlsoRefreshesChoiceCard()
     {
         var choice = new FakeChoiceSwitch { NextReadState = SwitchState.On, NextSelectedOption = "平衡" };

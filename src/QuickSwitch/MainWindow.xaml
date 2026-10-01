@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:QuickSwitch.Core.ViewModels;assembly=QuickSwitch.Core"
         xmlns:conv="clr-namespace:QuickSwitch.Converters"
+        xmlns:ctl="clr-namespace:QuickSwitch.Controls"
         Title="Windows 快捷开关" Height="560" Width="520"
         Background="#FF17171A" TextOptions.TextFormattingMode="Display"
         UseLayoutRounding="True">
@@ -34,10 +35,10 @@
                                    Visibility="{Binding ShowRestartBadge, Converter={StaticResource BoolToVisibility}}" />
                     </StackPanel>
 
-                    <ToggleButton Grid.Column="1" VerticalAlignment="Center"
-                                  Style="{StaticResource SwitchToggleStyle}"
-                                  IsChecked="{Binding IsOn, Mode=OneWay}"
-                                  Command="{Binding ToggleCommand}" />
+                    <ctl:CommandToggleButton Grid.Column="1" VerticalAlignment="Center"
+                                             Style="{StaticResource SwitchToggleStyle}"
+                                             IsChecked="{Binding IsOn, Mode=OneWay}"
+                                             Command="{Binding ToggleCommand}" />
                 </Grid>
             </Border>
         </DataTemplate>

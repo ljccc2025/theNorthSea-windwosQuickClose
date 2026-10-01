@@ -29,21 +29,29 @@ public sealed partial class MainViewModel : ObservableObject
         IsRefreshing = true;
         try
         {
-            foreach (var card in Cards)
-            {
-                try
-                {
-                    await card.RefreshAsync(CancellationToken.None).ConfigureAwait(true);
-                }
-                catch (Exception)
-                {
-                    // 单卡失败不拖垮其余卡片；卡片内部已把原因写进副标题，这里是最后一道隔离。
-                }
-            }
+            // 并行读：11 张卡串行跑 PowerShell 要十几秒，托盘弹出来还是旧状态。
+            // 每张卡各有自己的闸门，卡与卡之间没有共享状态，并发是安全的。
+            var reads = new Task[Cards.Count];
+            for (var index = 0; index < Cards.Count; index++)
+                reads[index] = RefreshOneAsync(Cards[index]);
+
+            await Task.WhenAll(reads).ConfigureAwait(true);
         }
         finally
         {
             IsRefreshing = false;
+        }
+    }
+
+    private static async Task RefreshOneAsync(ICardViewModel card)
+    {
+        try
+        {
+            await card.RefreshAsync(CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception)
+        {
+            // 单卡失败不拖垮其余卡片；卡片内部已把原因写进副标题，这里是最后一道隔离。
         }
     }
 }
