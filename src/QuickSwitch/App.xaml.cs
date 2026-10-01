@@ -1,13 +1,35 @@
-using System.Configuration;
-using System.Data;
 using System.Windows;
+using QuickSwitch.Core.Infrastructure;
+using QuickSwitch.Core.Switches;
+using QuickSwitch.Core.ViewModels;
 
 namespace QuickSwitch;
 
-/// <summary>
-/// Interaction logic for App.xaml
-/// </summary>
 public partial class App : System.Windows.Application
 {
-}
+    private TrayHost? _tray;
+    private MainWindow? _window;
 
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+
+        var powerShell = new PowerShellRunner(new ProcessRunner());
+        var registry = SwitchRegistry.CreateDefault(powerShell);
+        var cards = registry.All.Select(item => new SwitchCardViewModel(item));
+        var viewModel = new MainViewModel(cards, AdminContext.IsElevated());
+
+        _window = new MainWindow { DataContext = viewModel };
+        _tray = new TrayHost(_window);
+
+        MainWindow = _window;
+        _window.Show();
+        _ = viewModel.RefreshAllCommand.ExecuteAsync(null);
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        _tray?.Dispose();
+        base.OnExit(e);
+    }
+}
