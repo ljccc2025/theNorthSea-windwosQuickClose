@@ -6,8 +6,9 @@ Windows 快捷开关 — 常驻托盘的 Windows 11 系统设置开关面板。
 
 ## 状态
 
-M0 + M1 已实现：托盘常驻、整体提权、分组卡片列表、防火墙三档开关（含权威回读）。
-其余八个开关按 M2–M4 逐步接入。
+M0 + M1 + M2 已实现：托盘常驻、整体提权、分组卡片列表、防火墙三档开关（含权威回读）、
+系统代理、剪贴板历史、提权归属守卫（提升到别的管理员账户时封锁两张用户级卡片）。
+其余六个开关按 M3–M4 逐步接入。
 
 ## 构建与运行
 
@@ -30,6 +31,8 @@ dotnet publish src/QuickSwitch/QuickSwitch.csproj -c Release -r win-x64 --self-c
 ## 文档
 
 - [设计规格](docs/superpowers/specs/2026-10-01-windows-quickswitch-design.md)
+- [M0 + M1 实现计划](docs/superpowers/plans/2026-10-01-windows-quickswitch-m0-m1.md)
+- [M2 实现计划](docs/superpowers/plans/2026-10-01-windows-quickswitch-m2.md)
 
 ## 计划中的开关
 
@@ -54,10 +57,10 @@ dotnet publish src/QuickSwitch/QuickSwitch.csproj -c Release -r win-x64 --self-c
 
 ## 里程碑
 
-| # | 内容 |
-|---|---|
-| M0 | 骨架 + manifest 提权 + 托盘宿主 + 假卡片 |
-| M1 | `ISwitch` + 注册表 + 卡片列表 UI + 防火墙全链路 |
-| M2 | 代理 + 剪贴板 + 提权归属守卫 |
-| M3 | 休眠 + 快速启动 + 电源计划 |
-| M4 | 实时防护 + 功能组件 + UAC |
+| # | 内容 | 状态 |
+|---|---|---|
+| M0 | 骨架 + manifest 提权 + 托盘宿主 + 假卡片 | 已完成 |
+| M1 | `ISwitch` + 注册表 + 卡片列表 UI + 防火墙全链路 | 已完成 |
+| M2 | 代理 + 剪贴板 + 提权归属守卫 | 已完成 |
+| M3 | 休眠 + 快速启动 + 电源计划 | 待做 |
+| M4 | 实时防护 + 功能组件 + UAC | 待做 |

@@ -1,3 +1,4 @@
+using QuickSwitch.Core.Infrastructure;
 using QuickSwitch.Core.Switches;
 using QuickSwitch.Core.ViewModels;
 using QuickSwitch.Tests.Fakes;
@@ -99,5 +100,23 @@ public class SwitchCardViewModelTests
         await card.RefreshAsync(CancellationToken.None);
 
         Assert.Equal("无法解析防火墙状态", card.Subtitle);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_WhenBlockedByOwnerGuard_ShowsReasonAndDisablesToggle()
+    {
+        var inner = new FakeSwitch { NextReadState = SwitchState.On };
+        var card = new SwitchCardViewModel(new BlockedSwitch(inner, SessionOwnerGuard.ForeignAdminDetail));
+
+        await card.RefreshAsync(CancellationToken.None);
+
+        Assert.Equal(SwitchState.Blocked, card.State);
+        Assert.Equal("当前以其他管理员账户运行，用户级设置不可用", card.Subtitle);
+        Assert.False(card.CanToggle);
+        Assert.False(card.IsOn);
+
+        await card.ToggleAsync();
+
+        Assert.Null(inner.LastTarget);
     }
 }

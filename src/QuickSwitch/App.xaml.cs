@@ -15,7 +15,9 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
 
         var powerShell = new PowerShellRunner(new ProcessRunner());
-        var registry = SwitchRegistry.CreateDefault(powerShell);
+        var sessionOwner = new SessionOwnerGuard(new WindowsUserSidSource()).Evaluate();
+        var registry = SwitchRegistry.CreateDefault(
+            powerShell, new WindowsRegistryStore(), new Win32SettingsNotifier(), sessionOwner);
         var cards = registry.All.Select(item => new SwitchCardViewModel(item));
         var viewModel = new MainViewModel(cards, AdminContext.IsElevated());
 
