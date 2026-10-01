@@ -322,16 +322,30 @@ internal static class Program
                 expectedOk: proxyCard.State == (proxyExpectOn ? QuickSwitch.Core.Switches.SwitchState.On : QuickSwitch.Core.Switches.SwitchState.Off));
 
             // ---- 破坏性开关：确认弹窗两分支（UAC） ----
-            var uacBefore = ReadRegistry(RegistryHive.LocalMachine, UacKey, UacValue, RegistryView.Registry64);
             var uacLoc = located.TryGetValue("用户账户控制 (UAC)", out var u1) ? u1 : default;
+            var uacVm0 = Dispatcher(() => vm.Cards.OfType<SwitchCardViewModel>().First(c => c.Title == "用户账户控制 (UAC)"));
+            var uacDesc = Dispatcher(() => vm.Cards.OfType<SwitchCardViewModel>().First(c => c.Title == "用户账户控制 (UAC)").Descriptor);
             if (uacLoc.Toggle is null) Skip("S12 UAC 确认弹窗", "UI 里没定位到 UAC 卡的开关");
+            else if (uacVm0.State != QuickSwitch.Core.Switches.SwitchState.On)
+            {
+                // UAC 已是关闭态 → 点它等于"开启"（安全方向，本来就不该弹确认框）。
+                // 验收台不改动用户的安全设置：只验证描述符带着确认文案，然后诚实跳过。
+                Check(uacDesc.IsDestructive && !string.IsNullOrWhiteSpace(uacDesc.ConfirmText),
+                    "S12 关闭 UAC 带着确认文案（点下去之前必须能问清）",
+                    $"State={uacVm0.State} IsDestructive={uacDesc.IsDestructive} ConfirmText=\"{Truncate(uacDesc.ConfirmText, 160)}\"");
+                Skip("S12b/S13 UAC 点「取消」分支",
+                    $"当前 UAC 已是关闭态（EnableLUA={Show(ReadRegistry(RegistryHive.LocalMachine, UacKey, UacValue, RegistryView.Registry64))}）：点它等于开启（安全方向，不该弹确认框）；" +
+                    "验收台不为了跑用例去改用户的安全设置");
+            }
             else
             {
-                var uacVm = Dispatcher(() => vm.Cards.OfType<SwitchCardViewModel>().First(c => c.Title == "用户账户控制 (UAC)"));
+                var uacVm = uacVm0;
                 Console.WriteLine($"    UAC toggle: enabled={uacLoc.Toggle.Current.IsEnabled} name=\"{uacLoc.Toggle.Current.Name}\" " +
                                   $"kind=\"{uacLoc.Toggle.Current.ClassName}\" rect={Rect(uacLoc.Toggle)} VM.State={uacVm.State} CanToggle={uacVm.CanToggle}");
 
                 var uiaBefore = ReadToggleState(uacLoc.Toggle);
+                // 关键：快照必须在"这一次点击"之前立刻读，不能复用运行开始时读到的旧值。
+                var uacBefore = ReadRegistry(RegistryHive.LocalMachine, UacKey, UacValue, RegistryView.Registry64);
                 ClickElement(uacLoc.Toggle, hwnd);
                 var dlg = WaitForDialog(TimeSpan.FromSeconds(6));
                 if (dlg == IntPtr.Zero)
@@ -340,6 +354,7 @@ internal static class Program
                     Console.WriteLine($"    第一次点击后：UIA ToggleState={ReadToggleState(uacLoc.Toggle)}（点前 {uiaBefore}）" +
                                       $" IsBusy={mid.IsBusy} Subtitle=\"{Truncate(mid.Subtitle, 120)}\"");
                     // 第一次点击可能只被当成"激活窗口"吞掉，再点一次才是真点击。
+                    uacBefore = ReadRegistry(RegistryHive.LocalMachine, UacKey, UacValue, RegistryView.Registry64);
                     ClickElement(uacLoc.Toggle, hwnd);
                     dlg = WaitForDialog(TimeSpan.FromSeconds(10));
                 }
