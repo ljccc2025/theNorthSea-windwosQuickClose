@@ -33,9 +33,23 @@ tools/UiSmoke/bin/Debug/net10.0-windows/UiSmoke.exe --dump # 另打一份 UIA �
 powershell -ExecutionPolicy Bypass -File tools/verify-elevated.ps1
 ```
 
-未提权下的最近一次结果：`PASS=30 FAIL=0 SKIP=2`（SKIP = 需要提权才能进入的 Hyper-V 确认框、Win11 溢出面板里的托盘图标）。覆盖：11 张卡的标题/分组/显示顺序/副标题逐字一致、开关视觉状态 == ViewModel == 系统真值、未知与封锁态禁用、真鼠标点防火墙在未提权时给出系统原文且真值不动、剪贴板历史真写并还原、UAC 确认框文案与取消分支、UIA `Toggle()` 真触发命令、托盘菜单项文案与点击链路、关窗隐藏而进程存活。
+最近一次结果（2026-10-01）：
 
-提权下的额外断言（由 `tools/verify-elevated.ps1` 跑）：提权徽标 = 管理员模式、防火墙三档真开 → 再点真还原、三张功能组件卡读到真状态而不是 Unknown、托盘防火墙项真开真还原。
+| 跑法 | 结果 | SKIP |
+| --- | --- | --- |
+| 未提权 | `PASS=30 FAIL=0` | 2 |
+| 提权（管理员模式） | `PASS=33 FAIL=0` | 2 |
+
+覆盖：11 张卡的标题/分组/显示顺序/副标题逐字一致、开关视觉状态 == ViewModel == 系统真值、未知与封锁态禁用、UIA `Toggle()` 真触发命令、剪贴板历史真写并还原、UAC 确认框文案与取消分支、托盘菜单项文案跟随卡片状态且点击走同一条命令、关窗隐藏而进程存活。
+
+提权下额外的断言：提权徽标 = 管理员模式、防火墙三档相对**点击前的系统真值**翻转 → 再点真还原、三张功能组件卡读到真状态而不是 Unknown、托盘防火墙项同样真开真还原。
+
+两个 SKIP 都是诚实跳过，不是省略：
+
+- `S14a`：Hyper-V 处于关闭态时，点它等于真的启用该功能（耗时、需重启）——验收台只断言"破坏性开关带着确认文案"，不点。确认框路径由 UAC 卡真实走通。
+- `S16`：Win11 把托盘图标折进溢出面板，鼠标点不到；改由 `S18` 反射 `NotifyIcon.Visible/Text` 验证。
+
+验收台自身的两道保险（踩过坑才加的）：跑之前 `PreflightInput()` 反复确认 `SetCursorPos` 真的生效（dism/servicing 期间桌面输入注入会静默失效，鼠标事件落到旧坐标）；每次点击都打印 `click @(x,y) cursor=(..) moved=True/False`，`False` 的点击被标注为不可信。
 
 逐步人工对照清单见 [人工验收清单](docs/manual-verification.md)。
 

@@ -111,6 +111,7 @@ internal static class Program
             }
 
             WaitIdle(vm, TimeSpan.FromSeconds(180));
+            PreflightInput();
             Pass("S3 启动刷新跑完", $"IsRefreshing={vm.IsRefreshing} 卡片数={vm.Cards.Count} IsElevated={vm.IsElevated}");
 
             var expected = new (string Title, string Group)[]
@@ -234,46 +235,42 @@ internal static class Program
                     $"捕捉到刷新态={sawBusy}（仅信息）空副标题 {subs.Count(s => string.IsNullOrWhiteSpace(s))} 条 IsRefreshing={stillRefreshing}");
             }
 
-            // ---- 防火墙：真值比对 + 未提权失败路径 ----
+            // ---- 防火墙：真值比对 + 真翻转 + 未提权失败路径 ----
+            // 断言一律相对点击前的系统真值（本机防火墙可能被别的程序或用户自己的实例改过），跑完还原成点击前的样子。
             var fwTruth = ReadFirewallTruth();
             var fwCard = vmCards.First(c => c.Title == "Windows 防火墙");
-            var fwExpectOff = fwTruth.All(v => v.Value == "False");
-            Check(fwExpectOff ? fwCard.State == QuickSwitch.Core.Switches.SwitchState.Off : true,
-                "S8 防火墙卡状态 = 系统真值",
-                $"真值[{string.Join(", ", fwTruth.Select(v => $"{v.Key}={v.Value}"))}] 卡片 State={fwCard.State} IsOn={fwCard.IsOn}");
-            if (fwExpectOff && located.TryGetValue("Windows 防火墙", out var fwHit) && fwHit.Toggle is not null)
+            var fwAllOff = fwTruth.All(v => v.Value == "False");
+            var fwAllOn = fwTruth.All(v => v.Value == "True");
+            var fwExpectedState = fwAllOn ? SwitchState.On : fwAllOff ? SwitchState.Off : SwitchState.Mixed;
+            var fwText = string.Join(", ", fwTruth.Select(v => $"{v.Key}={v.Value}"));
+            Check(fwCard.State == fwExpectedState, "S8 防火墙卡状态 = 系统真值",
+                $"真值[{fwText}] 卡片 State={fwCard.State} IsOn={fwCard.IsOn}");
+            if (located.TryGetValue("Windows 防火墙", out var fwHit) && fwHit.Toggle is not null)
             {
-                ClickElement(fwHit.Toggle, hwnd);
-                WaitUntil(() => Dispatcher(() => vm.Cards.OfType<SwitchCardViewModel>()
-                    .First(c => c.Title == "Windows 防火墙").IsBusy), TimeSpan.FromSeconds(10));
-                WaitIdle(vm, TimeSpan.FromSeconds(120));
+                var expectOn = !fwAllOn;
+                ClickAndSettle(fwHit.Toggle, hwnd, vm, "Windows 防火墙");
                 var after = Dispatcher(() => vm.Cards.OfType<SwitchCardViewModel>().First(c => c.Title == "Windows 防火墙"));
                 var truthAfter = ReadFirewallTruth();
                 if (vm.IsElevated)
                 {
-                    var turnedOn = truthAfter.All(v => v.Value == "True")
-                                   && after.State == QuickSwitch.Core.Switches.SwitchState.On;
-                    Check(turnedOn, "S9（提权）点防火墙 → 真值三档全开 + 卡片翻到开",
-                        $"副标题=\"{after.Subtitle}\" State={after.State} IsOn={after.IsOn} 真值[{string.Join(", ", truthAfter.Select(v => $"{v.Key}={v.Value}"))}]");
-                    if (turnedOn && fwHit.Toggle is not null)
+                    var flipped = truthAfter.All(v => v.Value == (expectOn ? "True" : "False"))
+                                  && after.State == (expectOn ? SwitchState.On : SwitchState.Off)
+                                  && after.IsOn == expectOn;
+                    Check(flipped, "S9（提权）点防火墙 → 系统真值真的翻转 + 卡片跟着翻",
+                        $"点击前[{fwText}] 期望 {(expectOn ? "三档全开" : "三档全关")} 实得[{string.Join(", ", truthAfter.Select(v => $"{v.Key}={v.Value}"))}] State={after.State} IsOn={after.IsOn} 副标题=\"{after.Subtitle}\"");
+                    if (flipped)
                     {
-                        ClickElement(fwHit.Toggle, hwnd);
-                        WaitUntil(() => Dispatcher(() => vm.Cards.OfType<SwitchCardViewModel>()
-                            .First(c => c.Title == "Windows 防火墙").IsBusy), TimeSpan.FromSeconds(10));
-                        WaitIdle(vm, TimeSpan.FromSeconds(120));
+                        ClickAndSettle(fwHit.Toggle, hwnd, vm, "Windows 防火墙");
                         var restoredCard = Dispatcher(() => vm.Cards.OfType<SwitchCardViewModel>().First(c => c.Title == "Windows 防火墙"));
                         var truthRestored = ReadFirewallTruth();
-                        var allOff = truthRestored.All(v => v.Value == "False");
-                        Check(allOff && restoredCard.State == QuickSwitch.Core.Switches.SwitchState.Off && !restoredCard.IsOn,
-                            "S9b（提权）再点一次 → 真值还原三档全关 + 开关回 Off",
+                        Check(truthRestored.SequenceEqual(fwTruth) && restoredCard.State == fwExpectedState,
+                            "S9b（提权）再点一次 → 真值还原成点击前的样子",
                             $"副标题=\"{restoredCard.Subtitle}\" State={restoredCard.State} IsOn={restoredCard.IsOn} 真值[{string.Join(", ", truthRestored.Select(v => $"{v.Key}={v.Value}"))}]");
-                        if (!allOff)
-                            Fail("S9c 防火墙还原", $"真值没还原：{string.Join(", ", truthRestored.Select(v => $"{v.Key}={v.Value}"))}");
                     }
                 }
                 else
                 {
-                    var refused = truthAfter.All(v => v.Value == "False") && after.State == QuickSwitch.Core.Switches.SwitchState.Off
+                    var refused = truthAfter.SequenceEqual(fwTruth) && after.State == fwExpectedState
                                   && after.Subtitle.StartsWith("操作失败：", StringComparison.Ordinal);
                     Check(refused, "S9 未提权点防火墙 → 真值没变 + 开关弹回 + 副标题给出系统原文",
                         $"副标题=\"{after.Subtitle}\" State={after.State} IsOn={after.IsOn} 真值[{string.Join(", ", truthAfter.Select(v => $"{v.Key}={v.Value}"))}]");
@@ -281,7 +278,7 @@ internal static class Program
             }
             else
             {
-                Skip("S9 防火墙写入路径", "本机防火墙当前并非三档全关，跳过写入尝试以免改动用户设置");
+                Skip("S9 防火墙写入路径", "UI 里没定位到防火墙卡的开关");
             }
 
             // ---- 提权时：三张 Windows 功能组件卡必须能读到真状态（未提权时它们只能是 Unknown）----
@@ -302,7 +299,7 @@ internal static class Program
             var clipAfter = ReadRegistry(RegistryHive.CurrentUser, ClipboardKey, ClipboardValue, RegistryView.Registry64);
             var wrote = clipAfter is not null && !Equals(clipAfter, clipBefore);
             Check(wrote, "S10 点剪贴板历史 → HKCU\\...\\Clipboard\\EnableClipboardHistory 真的变了",
-                $"点前(原始)={Show(clipBefore)} 点后={Show(clipAfter)} 卡片 Subtitle=\"{clipOutcome.Subtitle}\" State={clipOutcome.State}");
+                $"点前(原始)={Show(clipBefore)} 点后={Show(clipAfter)} 卡片 Subtitle=\"{clipOutcome.Subtitle}\" State={clipOutcome.State} CanToggle={clipOutcome.CanToggle} IsBusy={clipOutcome.IsBusy}");
 
             // 再点一次回到原值，然后强制还原原始 DWORD
             ExerciseToggle(vm, located, "剪贴板历史", hwnd, TimeSpan.FromSeconds(120));
@@ -394,16 +391,18 @@ internal static class Program
                         $"IsEnabled={hvEnabled} State={hvVm.State} CanToggle={hvVm.CanToggle} Subtitle=\"{Truncate(hvVm.Subtitle, 80)}\"");
                     Skip("S14a Hyper-V 关闭确认框", "未提权 → 状态未知 → 开关禁用，无法进入确认流程（提权下由 verify-elevated.ps1 覆盖）");
                 }
+                else if (hvVm.State != SwitchState.On)
+                {
+                    // 关闭态点它 = 真的执行启用（慢、要重启、动机器），验收台绝不自作主张点这一下。
+                    Check(hvVm.Descriptor.IsDestructive && !string.IsNullOrWhiteSpace(hvVm.Descriptor.ConfirmText),
+                        "S14 破坏性开关带着确认文案（点下去之前必须能问清）",
+                        $"State={hvVm.State} IsDestructive={hvVm.Descriptor.IsDestructive} ConfirmText=\"{Truncate(hvVm.Descriptor.ConfirmText ?? string.Empty, 120)}\"");
+                    Skip("S14a Hyper-V 关闭确认框", $"当前 State={hvVm.State}（关闭态）→ 点它会真的启用功能（耗时且需重启），验收台不点；确认框路径已由 UAC 卡真实验证");
+                }
                 else
                 {
                     ClickElement(hvLoc.Toggle, hwnd);
-                    var dlg = WaitForDialog(TimeSpan.FromSeconds(6));
-                    if (dlg == IntPtr.Zero)
-                    {
-                        ClickElement(hvLoc.Toggle, hwnd);
-                        dlg = WaitForDialog(TimeSpan.FromSeconds(10));
-                    }
-
+                    var dlg = WaitForDialog(TimeSpan.FromSeconds(12));
                     if (dlg == IntPtr.Zero) Fail("S14 Hyper-V 关闭前弹确认框",
                         $"点开关后没出现对话框；本进程顶层窗口 = {DumpProcessWindows()}");
                     else
@@ -430,9 +429,10 @@ internal static class Program
                 var afterToggle = ReadRegistry(RegistryHive.CurrentUser, ClipboardKey, ClipboardValue, RegistryView.Registry64);
                 var vmOn = Dispatcher(() => vm.Cards.OfType<SwitchCardViewModel>().First(c => c.Title == "剪贴板历史").IsOn);
                 var uiaState = ReadToggleState(clipLoc.Toggle);
+                var clipCanToggle = Dispatcher(() => vm.Cards.OfType<SwitchCardViewModel>().First(c => c.Title == "剪贴板历史").CanToggle);
                 Check(!Equals(beforeToggle, afterToggle),
                     "S15 UI Automation 的 Toggle() 能触发真实命令（讲述人/自动化可用）",
-                    $"点前={Show(beforeToggle)} 点后={Show(afterToggle)} UIA ToggleState={uiaState} VM.IsOn={vmOn}");
+                    $"点前={Show(beforeToggle)} 点后={Show(afterToggle)} UIA ToggleState={uiaState} VM.IsOn={vmOn} CanToggle={clipCanToggle}");
                 Check(uiaState == (vmOn ? "On" : "Off"),
                     "S15b UIA ToggleState 与 VM 权威状态一致（不再对自动化说谎）",
                     $"UIA ToggleState={uiaState} VM.IsOn={vmOn}");
@@ -521,6 +521,25 @@ internal static class Program
             Thread.Sleep(200);
         }
         return false;
+    }
+
+    /// 触发一次全量刷新并等它真起真落；末尾再停一拍，避开"跨线程读 RefreshAsync 两次赋值之间"的撕裂快照。
+    private static void SettleRefresh(MainViewModel vm, TimeSpan timeout)
+    {
+        Dispatcher(() => { vm.RefreshAllCommand.Execute(null); return true; });
+        WaitUntil(() => Dispatcher(() => vm.IsRefreshing), TimeSpan.FromSeconds(5));
+        WaitIdle(vm, timeout);
+        Thread.Sleep(400);
+    }
+
+    /// 点一下开关，等这张卡忙起来又闲下去，再停一拍。
+    private static void ClickAndSettle(AutomationElement toggle, IntPtr hwnd, MainViewModel vm, string title)
+    {
+        ClickElement(toggle, hwnd);
+        WaitUntil(() => Dispatcher(() => vm.Cards.OfType<SwitchCardViewModel>().First(c => c.Title == title).IsBusy),
+            TimeSpan.FromSeconds(10));
+        WaitIdle(vm, TimeSpan.FromSeconds(180));
+        Thread.Sleep(400);
     }
 
     // ---------- UI Automation ----------
@@ -617,38 +636,46 @@ internal static class Program
             $"菜单项=\"{Label()}\" 期望=\"{expectedLabel}\" 菜单=[{string.Join(" | ", texts)}]");
 
         // 先刷一遍，让"点击前"的副标题回到干净状态（上一次 S9 点失败留下的错误文案会掩盖本次变化）。
-        Dispatcher(() => { viewModel.RefreshAllCommand.Execute(null); return true; });
-        WaitIdle(viewModel, TimeSpan.FromSeconds(120));
+        SettleRefresh(viewModel, TimeSpan.FromSeconds(120));
         var card2 = Dispatcher(() => viewModel.Cards.OfType<SwitchCardViewModel>().First(c => c.Title == "Windows 防火墙"));
         var beforeSubtitle = card2.Subtitle;
+        var beforeTruth = ReadFirewallTruth();
+        var beforeAllOn = beforeTruth.All(pair => pair.Value == "True");
+        var beforeState = beforeAllOn ? SwitchState.On
+            : beforeTruth.All(pair => pair.Value == "False") ? SwitchState.Off : SwitchState.Mixed;
         Dispatcher(() => { firewallItem.GetType().GetMethod("PerformClick")!.Invoke(firewallItem, null); return true; });
         WaitUntil(() => Dispatcher(() => viewModel.Cards.OfType<SwitchCardViewModel>()
             .First(c => c.Title == "Windows 防火墙").IsBusy), TimeSpan.FromSeconds(5));
         WaitIdle(viewModel, TimeSpan.FromSeconds(120));
+        Thread.Sleep(400);
         var after = Dispatcher(() => viewModel.Cards.OfType<SwitchCardViewModel>().First(c => c.Title == "Windows 防火墙"));
         var afterTruth = ReadFirewallTruth();
         if (viewModel.IsElevated)
         {
-            var flippedOn = afterTruth.All(pair => pair.Value == "True") && after.State == SwitchState.On;
-            Check(flippedOn, "S20（提权）点托盘「防火墙」项 → 同一张卡真的开了防火墙",
-                $"State={after.State}（原 {card2.State}）Subtitle=\"{beforeSubtitle}\" → \"{after.Subtitle}\"");
+            // 方向由点击前的系统真值决定，不看卡片快照——卡片 State/Subtitle 是两次赋值，跨线程读会拿到撕裂快照。
+            var expectOn = !beforeAllOn;
+            var flipped = afterTruth.All(pair => pair.Value == (expectOn ? "True" : "False"))
+                          && after.State == (expectOn ? SwitchState.On : SwitchState.Off) && after.IsOn == expectOn;
+            Check(flipped, "S20（提权）点托盘「防火墙」项 → 走卡片同一条命令并真的翻转",
+                $"点击前[{string.Join(",", beforeTruth.Select(pair => $"{pair.Key}={pair.Value}"))}] 期望 {(expectOn ? "三档全开" : "三档全关")} 实得[{string.Join(",", afterTruth.Select(pair => $"{pair.Key}={pair.Value}"))}] State={after.State} 副标题=\"{beforeSubtitle}\" → \"{after.Subtitle}\"");
             Dispatcher(() => { firewallItem.GetType().GetMethod("PerformClick")!.Invoke(firewallItem, null); return true; });
             WaitUntil(() => Dispatcher(() => viewModel.Cards.OfType<SwitchCardViewModel>()
                 .First(c => c.Title == "Windows 防火墙").IsBusy), TimeSpan.FromSeconds(5));
             WaitIdle(viewModel, TimeSpan.FromSeconds(120));
+            Thread.Sleep(400);
             var restoredTruth = ReadFirewallTruth();
             var restoredCard = Dispatcher(() => viewModel.Cards.OfType<SwitchCardViewModel>().First(c => c.Title == "Windows 防火墙"));
-            Check(restoredTruth.All(pair => pair.Value == "False") && restoredCard.State == SwitchState.Off,
-                "S20b（提权）再点一次托盘项 → 防火墙还原成三档全关",
-                $"State={restoredCard.State} 真值={string.Join(",", restoredTruth.Select(pair => $"{pair.Key}={pair.Value}"))}");
+            Check(restoredTruth.SequenceEqual(beforeTruth) && restoredCard.State == beforeState,
+                "S20b（提权）再点一次托盘项 → 还原成点击前的样子",
+                $"State={restoredCard.State}（点击前 {beforeState}）真值={string.Join(",", restoredTruth.Select(pair => $"{pair.Key}={pair.Value}"))}");
         }
         else
         {
-            Check(after.State == card2.State && after.Subtitle != beforeSubtitle
+            Check(after.State == beforeState && after.Subtitle != beforeSubtitle
                   && after.Subtitle.StartsWith("操作失败：", StringComparison.Ordinal)
                   && after.Subtitle.Contains("Access is denied", StringComparison.Ordinal),
                 "S20 点托盘「防火墙」项 → 走的是卡片同一条命令（未提权给出系统原文，真值没动）",
-                $"State={after.State}（原 {card2.State}）Subtitle=\"{beforeSubtitle}\" → \"{after.Subtitle}\" 真值={string.Join(",", afterTruth.Select(pair => $"{pair.Key}={pair.Value}"))}");
+                $"State={after.State}（原 {card2.State}/{beforeState}）Subtitle=\"{beforeSubtitle}\" → \"{after.Subtitle}\" 真值={string.Join(",", afterTruth.Select(pair => $"{pair.Key}={pair.Value}"))}");
         }
 
         var hideItem = items.FirstOrDefault(item => ItemText(item).Contains("显示", StringComparison.Ordinal));
@@ -715,14 +742,41 @@ internal static class Program
         Thread.Sleep(200);
         var x = (int)(rect.Left + rect.Width / 2);
         var y = (int)(rect.Top + rect.Height / 2);
-        SetCursorPos(x, y);
-        Thread.Sleep(80);
+        // 桌面被别的进程占着输入时 SetCursorPos 会静默失败，鼠标事件就落到旧坐标上——先确认光标真到了，再点。
+        var moved = false;
+        for (var attempt = 0; attempt < 5 && !moved; attempt++)
+        {
+            SetCursorPos(x, y);
+            Thread.Sleep(150);
+            GetCursorPos(out var p);
+            moved = Math.Abs(p.X - x) <= 2 && Math.Abs(p.Y - y) <= 2;
+            if (!moved) Thread.Sleep(500);
+        }
         GetCursorPos(out var pos);
-        Console.WriteLine($"    click @({x},{y}) cursor=({pos.X},{pos.Y}) rect={rect}");
+        Console.WriteLine($"    click @({x},{y}) cursor=({pos.X},{pos.Y}) moved={moved} rect={rect}" +
+                          (moved ? string.Empty : "  ← 光标没到位，这次点击不可信"));
         mouse_event(MouseLeftDown, 0, 0, 0, UIntPtr.Zero);
         Thread.Sleep(40);
         mouse_event(MouseLeftUp, 0, 0, 0, UIntPtr.Zero);
         Thread.Sleep(300);
+    }
+
+    /// 等桌面能接受输入注入（有别的进程在跑服务/占着输入时，注入的点击会静默丢失）。
+    private static void PreflightInput()
+    {
+        for (var attempt = 1; attempt <= 30; attempt++)
+        {
+            SetCursorPos(600, 400);
+            Thread.Sleep(120);
+            GetCursorPos(out var p);
+            if (Math.Abs(p.X - 600) <= 2 && Math.Abs(p.Y - 400) <= 2)
+            {
+                Console.WriteLine($"    输入注入就绪（第 {attempt} 次探测）");
+                return;
+            }
+            Thread.Sleep(1000);
+        }
+        Console.WriteLine("    警告：SetCursorPos 30 次都不生效，鼠标点击类断言本轮不可信");
     }
 
     private static Rect EnsureVisible(AutomationElement el)
@@ -919,7 +973,7 @@ internal static class Program
         catch (Exception ex) { Transcript.AppendLine($"    [registry] delete {subKey}\\{value} failed: {ex.Message}"); }
     }
 
-    private static (string Subtitle, QuickSwitch.Core.Switches.SwitchState State) ExerciseToggle(
+    private static (string Subtitle, QuickSwitch.Core.Switches.SwitchState State, bool CanToggle, bool IsBusy) ExerciseToggle(
         MainViewModel vm,
         Dictionary<string, (AutomationElement? Card, AutomationElement? Toggle, AutomationElement? Combo)> located,
         string title,
@@ -929,14 +983,15 @@ internal static class Program
         if (!located.TryGetValue(title, out var hit) || hit.Toggle is null)
         {
             Fail($"点击「{title}」", "UI 里没定位到该卡的开关");
-            return (string.Empty, QuickSwitch.Core.Switches.SwitchState.Unknown);
+            return (string.Empty, QuickSwitch.Core.Switches.SwitchState.Unknown, false, false);
         }
 
         ClickElement(hit.Toggle, hwnd);
+        var sawBusy = false;
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
         while (DateTime.UtcNow < deadline)
         {
-            if (Dispatcher(() => vm.Cards.OfType<SwitchCardViewModel>().First(c => c.Title == title).IsBusy)) break;
+            if (Dispatcher(() => vm.Cards.OfType<SwitchCardViewModel>().First(c => c.Title == title).IsBusy)) { sawBusy = true; break; }
             Thread.Sleep(150);
         }
         WaitUntil(() => !Dispatcher(() => vm.Cards.OfType<SwitchCardViewModel>().First(c => c.Title == title).IsBusy), timeout);
@@ -945,9 +1000,9 @@ internal static class Program
         var snap = Dispatcher(() =>
         {
             var c = vm.Cards.OfType<SwitchCardViewModel>().First(x => x.Title == title);
-            return (c.Subtitle, c.State);
+            return (c.Subtitle, c.State, c.CanToggle, c.IsBusy);
         });
-        Console.WriteLine($"    after click 「{title}」: State={snap.State} Subtitle=\"{Truncate(snap.Subtitle, 120)}\"");
+        Console.WriteLine($"    after click 「{title}」: State={snap.State} 命令起过={sawBusy} Subtitle=\"{Truncate(snap.Subtitle, 120)}\"");
         return snap;
     }
 
