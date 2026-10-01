@@ -26,7 +26,7 @@ public partial class App : System.Windows.Application
         var sessionOwner = new SessionOwnerGuard(new WindowsUserSidSource()).Evaluate();
         var registry = SwitchRegistry.CreateDefault(
             powerShell, new WindowsRegistryStore(), new Win32SettingsNotifier(), powerCfg, sessionOwner);
-        var cards = registry.All.Select(CardViewModelFactory.Create);
+        var cards = registry.All.Select(item => CardViewModelFactory.Create(item, new MessageBoxConfirmationPrompt()));
         var viewModel = new MainViewModel(cards, AdminContext.IsElevated());
 
         _window = new MainWindow { DataContext = viewModel };

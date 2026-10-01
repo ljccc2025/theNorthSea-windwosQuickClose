@@ -181,4 +181,133 @@ public class SwitchCardViewModelTests
         Assert.Equal("操作失败：无法启动进程 'powershell'", card.Subtitle);
         Assert.False(card.IsBusy);
     }
+
+    [Fact]
+    public async Task RefreshAsync_WhenPendingRestart_LightsBadge()
+    {
+        var fake = new FakeSwitch { NextReadState = SwitchState.PendingRestart, NextReadDetail = "重启后生效" };
+        var card = new SwitchCardViewModel(fake);
+
+        await card.RefreshAsync(CancellationToken.None);
+
+        Assert.Equal(SwitchState.PendingRestart, card.State);
+        Assert.True(card.ShowRestartBadge);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_WhenPlainState_ClearsBadge()
+    {
+        var fake = new FakeSwitch { NextReadState = SwitchState.PendingRestart };
+        var card = new SwitchCardViewModel(fake);
+        await card.RefreshAsync(CancellationToken.None);
+
+        fake.NextReadState = SwitchState.On;
+        await card.RefreshAsync(CancellationToken.None);
+
+        Assert.False(card.ShowRestartBadge);
+    }
+
+    [Fact]
+    public async Task ToggleAsync_SuccessOnRequiresRestartSwitch_LightsBadge()
+    {
+        var fake = new FakeSwitch
+        {
+            Descriptor = new SwitchDescriptor("slow", SwitchGroup.System, "慢开关", "要重启", RequiresRestart: true),
+            NextReadState = SwitchState.Off,
+        };
+        var card = new SwitchCardViewModel(fake);
+        await card.RefreshAsync(CancellationToken.None);
+
+        await card.ToggleAsync();
+
+        Assert.Equal(SwitchState.On, card.State);
+        Assert.True(card.ShowRestartBadge);
+    }
+
+    [Fact]
+    public async Task ToggleAsync_WhenApplyFails_DoesNotLightBadge()
+    {
+        var fake = new FakeSwitch
+        {
+            Descriptor = new SwitchDescriptor("slow", SwitchGroup.System, "慢开关", "要重启", RequiresRestart: true),
+            NextReadState = SwitchState.On,
+            ApplyResult = SwitchApplyResult.Fail("拒绝访问。"),
+        };
+        var card = new SwitchCardViewModel(fake);
+        await card.RefreshAsync(CancellationToken.None);
+
+        await card.ToggleAsync();
+
+        Assert.False(card.ShowRestartBadge);
+    }
+
+    [Fact]
+    public async Task ToggleAsync_DestructiveOff_WhenUserCancels_DoesNothing()
+    {
+        var fake = DestructiveSwitch(SwitchState.On);
+        var prompt = new FakeConfirmationPrompt { Answer = false };
+        var card = new SwitchCardViewModel(fake, prompt);
+        await card.RefreshAsync(CancellationToken.None);
+
+        await card.ToggleAsync();
+
+        Assert.Null(fake.LastTarget);
+        Assert.Equal(SwitchState.On, card.State);
+        Assert.True(card.IsOn);
+        Assert.False(card.IsBusy);
+        Assert.Equal(["关掉就回不来了，确定吗？"], prompt.Questions);
+    }
+
+    [Fact]
+    public async Task ToggleAsync_DestructiveOff_WhenUserConfirms_Applies()
+    {
+        var fake = DestructiveSwitch(SwitchState.On);
+        var prompt = new FakeConfirmationPrompt { Answer = true };
+        var card = new SwitchCardViewModel(fake, prompt);
+        await card.RefreshAsync(CancellationToken.None);
+
+        await card.ToggleAsync();
+
+        Assert.Equal(SwitchState.Off, fake.LastTarget);
+        Assert.Equal(SwitchState.Off, card.State);
+        Assert.Single(prompt.Questions);
+    }
+
+    [Fact]
+    public async Task ToggleAsync_DestructiveButTurningOn_DoesNotPrompt()
+    {
+        var fake = DestructiveSwitch(SwitchState.Off);
+        var prompt = new FakeConfirmationPrompt { Answer = false };
+        var card = new SwitchCardViewModel(fake, prompt);
+        await card.RefreshAsync(CancellationToken.None);
+
+        await card.ToggleAsync();
+
+        Assert.Equal(SwitchState.On, fake.LastTarget);
+        Assert.Empty(prompt.Questions);
+    }
+
+    [Fact]
+    public async Task ToggleAsync_ConfirmedReadBackThatIsStillOn_ReportsApplyError()
+    {
+        var fake = DestructiveSwitch(SwitchState.On);
+        fake.ApplyResult = SwitchApplyResult.Fail("UAC 被策略锁定。");
+        var card = new SwitchCardViewModel(fake, new FakeConfirmationPrompt { Answer = true });
+        await card.RefreshAsync(CancellationToken.None);
+
+        await card.ToggleAsync();
+
+        Assert.Equal(SwitchState.On, card.State);
+        Assert.Equal("操作失败：UAC 被策略锁定。", card.Subtitle);
+    }
+
+    private static FakeSwitch DestructiveSwitch(SwitchState state) => new()
+    {
+        Descriptor = new SwitchDescriptor(
+            "destructive", SwitchGroup.Security, "破坏性开关", "原始副标题",
+            RequiresRestart: true,
+            IsDestructive: true,
+            ConfirmText: "关掉就回不来了，确定吗？"),
+        NextReadState = state,
+    };
 }

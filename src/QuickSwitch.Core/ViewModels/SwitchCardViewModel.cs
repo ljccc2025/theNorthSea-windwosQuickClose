@@ -7,6 +7,7 @@ namespace QuickSwitch.Core.ViewModels;
 public sealed partial class SwitchCardViewModel : ObservableObject, ICardViewModel
 {
     private readonly ISwitch _switch;
+    private readonly IConfirmationPrompt? _confirmationPrompt;
 
     /// 同一张卡上「刷新」与「切换」共用的一把闸门：两者一旦交错，
     /// 先启动的旧读会在新写之后落地，界面就会显示与真值相反的状态。
@@ -14,9 +15,10 @@ public sealed partial class SwitchCardViewModel : ObservableObject, ICardViewMod
 
     private SwitchState _state = SwitchState.Unknown;
 
-    public SwitchCardViewModel(ISwitch @switch)
+    public SwitchCardViewModel(ISwitch @switch, IConfirmationPrompt? confirmationPrompt = null)
     {
         _switch = @switch;
+        _confirmationPrompt = confirmationPrompt;
         title = @switch.Descriptor.Title;
         group = @switch.Descriptor.Group;
         subtitle = @switch.Descriptor.Subtitle;
@@ -37,6 +39,10 @@ public sealed partial class SwitchCardViewModel : ObservableObject, ICardViewMod
 
     [ObservableProperty]
     private bool isOn;
+
+    /// 「重启后生效」徽标：只在权威回读说 PendingRestart，或刚写完一个需重启的开关时亮。
+    [ObservableProperty]
+    private bool showRestartBadge;
 
     public SwitchDescriptor Descriptor => _switch.Descriptor;
 
@@ -60,6 +66,7 @@ public sealed partial class SwitchCardViewModel : ObservableObject, ICardViewMod
             State = read.State;
             IsOn = read.State == SwitchState.On;
             Subtitle = read.Detail ?? Descriptor.Subtitle;
+            ShowRestartBadge = read.State == SwitchState.PendingRestart;
         }
         catch (Exception ex)
         {
@@ -83,6 +90,10 @@ public sealed partial class SwitchCardViewModel : ObservableObject, ICardViewMod
 
         var target = State == SwitchState.On ? SwitchState.Off : SwitchState.On;
 
+        // 关闭破坏性开关（UAC、功能组件）先过确认；用户点取消就当没点过。
+        if (target == SwitchState.Off && Descriptor.IsDestructive && !ConfirmDestructive())
+            return;
+
         await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
@@ -96,6 +107,7 @@ public sealed partial class SwitchCardViewModel : ObservableObject, ICardViewMod
             Subtitle = apply.Success
                 ? read.Detail ?? Descriptor.Subtitle
                 : $"操作失败：{apply.Error ?? ErrorTextFallback}";
+            ShowRestartBadge = apply.Success && Descriptor.RequiresRestart;
         }
         catch (Exception ex)
         {
@@ -111,6 +123,13 @@ public sealed partial class SwitchCardViewModel : ObservableObject, ICardViewMod
             // 让 OneWay 绑定把权威状态重新推回视觉层；操作失败时开关自动弹回。
             OnPropertyChanged(nameof(IsOn));
         }
+    }
+
+    private bool ConfirmDestructive()
+    {
+        var message = Descriptor.ConfirmText ?? $"关闭「{Descriptor.Title}」需要重启或会影响现有配置，确定吗？";
+
+        return _confirmationPrompt?.Confirm(message) ?? true;
     }
 
     private const string ErrorTextFallback = "未知错误";

@@ -24,10 +24,18 @@ public class SwitchRegistryTests
         var registry = CreateRegistry();
 
         Assert.Equal(
-            ["firewall", "system-proxy", "hibernate", "fast-startup", "power-plan", "clipboard-history"],
+            [
+                "firewall", "system-proxy", "hibernate", "fast-startup", "power-plan", "clipboard-history",
+                "defender-realtime", "uac",
+                "windows-feature:hyper-v", "windows-feature:wsl", "windows-feature:vm-platform",
+            ],
             registry.All.Select(item => item.Descriptor.Id));
         Assert.Equal(
-            [SwitchGroup.Security, SwitchGroup.Network, SwitchGroup.Power, SwitchGroup.Power, SwitchGroup.Power, SwitchGroup.System],
+            [
+                SwitchGroup.Security, SwitchGroup.Network, SwitchGroup.Power, SwitchGroup.Power,
+                SwitchGroup.Power, SwitchGroup.System, SwitchGroup.Security, SwitchGroup.Security,
+                SwitchGroup.System, SwitchGroup.System, SwitchGroup.System,
+            ],
             registry.All.Select(item => item.Descriptor.Group));
         Assert.IsType<FirewallSwitch>(registry.All[0]);
         Assert.IsType<SystemProxySwitch>(registry.All[1]);
@@ -35,6 +43,11 @@ public class SwitchRegistryTests
         Assert.IsType<FastStartupSwitch>(registry.All[3]);
         Assert.IsType<PowerPlanSwitch>(registry.All[4]);
         Assert.IsType<ClipboardHistorySwitch>(registry.All[5]);
+        Assert.IsType<DefenderRealtimeSwitch>(registry.All[6]);
+        Assert.IsType<UacSwitch>(registry.All[7]);
+        Assert.All(
+            registry.All.Skip(8),
+            item => Assert.IsType<WindowsFeatureSwitch>(item));
     }
 
     [Fact]
@@ -75,6 +88,10 @@ public class SwitchRegistryTests
         Assert.IsType<HibernateSwitch>(registry.All[2]);
         Assert.IsType<FastStartupSwitch>(registry.All[3]);
         Assert.IsType<PowerPlanSwitch>(registry.All[4]);
+
+        // Defender 与 UAC 也写 HKLM，归属守卫不该碰它们。
+        Assert.IsType<DefenderRealtimeSwitch>(registry.All[6]);
+        Assert.IsType<UacSwitch>(registry.All[7]);
     }
 
     [Fact]

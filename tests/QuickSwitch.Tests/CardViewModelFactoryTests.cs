@@ -33,7 +33,7 @@ public class CardViewModelFactoryTests
             new FakePowerCfg(),
             SessionOwnerState.SameAccount);
 
-        var cards = registry.All.Select(CardViewModelFactory.Create).ToArray();
+        var cards = registry.All.Select(item => CardViewModelFactory.Create(item)).ToArray();
 
         Assert.Collection(
             cards,
@@ -42,11 +42,20 @@ public class CardViewModelFactoryTests
             card => Assert.IsType<SwitchCardViewModel>(card),
             card => Assert.IsType<SwitchCardViewModel>(card),
             card => Assert.IsType<ChoiceCardViewModel>(card),
+            card => Assert.IsType<SwitchCardViewModel>(card),
+            card => Assert.IsType<SwitchCardViewModel>(card),
+            card => Assert.IsType<SwitchCardViewModel>(card),
+            card => Assert.IsType<SwitchCardViewModel>(card),
+            card => Assert.IsType<SwitchCardViewModel>(card),
             card => Assert.IsType<SwitchCardViewModel>(card));
 
         // 分组名字直接透传给分组视图。
         Assert.Equal(
-            [SwitchGroup.Security, SwitchGroup.Network, SwitchGroup.Power, SwitchGroup.Power, SwitchGroup.Power, SwitchGroup.System],
+            [
+                SwitchGroup.Security, SwitchGroup.Network, SwitchGroup.Power, SwitchGroup.Power,
+                SwitchGroup.Power, SwitchGroup.System, SwitchGroup.Security, SwitchGroup.Security,
+                SwitchGroup.System, SwitchGroup.System, SwitchGroup.System,
+            ],
             cards.Select(card => card.Group));
     }
 }

@@ -41,6 +41,9 @@ public sealed class SwitchRegistry
             new FastStartupSwitch(registry),
             new PowerPlanSwitch(powerCfg),
             GuardUserLevel(new ClipboardHistorySwitch(registry, notifier)),
+            new DefenderRealtimeSwitch(powerShell),
+            new UacSwitch(registry),
+            .. WindowsFeatureCatalog.All.Select(spec => (ISwitch)new WindowsFeatureSwitch(powerShell, spec)),
         ]);
     }
 }

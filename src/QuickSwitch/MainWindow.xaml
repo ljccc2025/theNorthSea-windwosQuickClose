@@ -30,6 +30,8 @@
                                    TextWrapping="Wrap" Margin="0,4,0,0" />
                         <TextBlock Text="处理中…" FontSize="12" Foreground="#FF6FA8FF" Margin="0,4,0,0"
                                    Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}" />
+                        <TextBlock Text="重启后生效" FontSize="11" Foreground="#FFE0A34E" Margin="0,4,0,0"
+                                   Visibility="{Binding ShowRestartBadge, Converter={StaticResource BoolToVisibility}}" />
                     </StackPanel>
 
                     <ToggleButton Grid.Column="1" VerticalAlignment="Center"
