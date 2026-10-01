@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/QuickSwitch.Core/QuickSwitch.Core.csproj" />
+    <Project Path="src/QuickSwitch/QuickSwitch.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/QuickSwitch.Tests/QuickSwitch.Tests.csproj" />
+  </Folder>
+</Solution>
