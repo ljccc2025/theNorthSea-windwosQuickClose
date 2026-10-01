@@ -20,6 +20,9 @@
 
 ## 已在本机验证过的事实（写代码前必须知道）
 
+- `dotnet new sln`（SDK 10.0.300）生成的是 **QuickSwitch.slnx**，不是 .sln —— 本计划中所有 `QuickSwitch.sln` 一律读作 `QuickSwitch.slnx`。
+- 任务 0 已经创建 `src/QuickSwitch/app.manifest`（最小占位，无 requestedExecutionLevel）与 `src/QuickSwitch/App.xaml.cs` 里的显式 `System.Windows.Application`（UseWindowsForms + ImplicitUsings 导致 Application 二义）；两者都由任务 7 整段替换。
+
 1. 本机防火墙当前三档状态均为 **OFF**（`netsh advfirewall show allprofiles state` → Domain/Private/Public 全 `State OFF`）。
 2. `Get-NetFirewallProfile` 输出 `Name` = `Domain`/`Private`/`Public`、`Enabled` = `True`/`False`，**非提权也可读**。
 3. **坑：`Set-NetFirewallProfile -Enabled $true` 会抛类型错误** —— `Cannot process argument transformation on parameter 'Enabled'. Cannot convert value "True" to type "Microsoft.PowerShell.Cmdletization.GeneratedTypes.NetSecurity.GpoBoolean. Error: "Invalid cast from 'System.Boolean' to 'GpoBoolean'."` 必须传**裸字符串标记** `-Enabled True` / `-Enabled False`（参数模式下的裸 `True` 会被解析成字符串，可正常转换成 `GpoBoolean`）。已验证 `-Enabled False` 绑定成功。
@@ -35,7 +38,7 @@
 
 | 路径 | 职责 |
 |---|---|
-| `QuickSwitch.sln` | 解决方案（若 SDK 生成 `.slnx`，则按实际文件名替换后续命令） |
+| `QuickSwitch.slnx` | 解决方案（若 SDK 生成 `.slnx`，则按实际文件名替换后续命令） |
 | `Directory.Build.props` | 三项目共享属性（TFM / Nullable / ImplicitUsings / LangVersion） |
 | `src/QuickSwitch.Core/QuickSwitch.Core.csproj` | 类库，无 WPF，可被单测直接引用 |
 | `src/QuickSwitch.Core/Switches/SwitchState.cs` | 六态枚举 |
@@ -80,7 +83,7 @@
 ### 任务 0：解决方案与项目骨架
 
 **文件：**
-- 创建：`Directory.Build.props`、`QuickSwitch.sln`、`src/QuickSwitch.Core/QuickSwitch.Core.csproj`、`src/QuickSwitch/QuickSwitch.csproj`、`tests/QuickSwitch.Tests/QuickSwitch.Tests.csproj`
+- 创建：`Directory.Build.props`、`QuickSwitch.slnx`、`src/QuickSwitch.Core/QuickSwitch.Core.csproj`、`src/QuickSwitch/QuickSwitch.csproj`、`tests/QuickSwitch.Tests/QuickSwitch.Tests.csproj`
 
 - [ ] **步骤 1：生成三个项目和解决方案**
 
@@ -90,10 +93,10 @@ dotnet new sln -n QuickSwitch
 dotnet new classlib -n QuickSwitch.Core -o src/QuickSwitch.Core
 dotnet new wpf -n QuickSwitch -o src/QuickSwitch
 dotnet new xunit -n QuickSwitch.Tests -o tests/QuickSwitch.Tests
-Get-ChildItem -Filter 'QuickSwitch.sln*' | Select-Object -ExpandProperty Name
+Get-ChildItem -Filter 'QuickSwitch.slnx*' | Select-Object -ExpandProperty Name
 ```
 
-预期：最后一行输出 `QuickSwitch.sln`（若输出 `QuickSwitch.slnx`，后续所有 `QuickSwitch.sln` 一律替换为 `QuickSwitch.slnx`）。
+预期：最后一行输出 `QuickSwitch.slnx`（若输出 `QuickSwitch.slnx`，后续所有 `QuickSwitch.slnx` 一律替换为 `QuickSwitch.slnx`）。
 
 - [ ] **步骤 2：写入 `Directory.Build.props`**
 
@@ -159,8 +162,8 @@ Get-ChildItem -Filter 'QuickSwitch.sln*' | Select-Object -ExpandProperty Name
 
 ```powershell
 cd 'D:\乱搞\Windows快捷开关'
-dotnet sln QuickSwitch.sln add src/QuickSwitch.Core/QuickSwitch.Core.csproj src/QuickSwitch/QuickSwitch.csproj tests/QuickSwitch.Tests/QuickSwitch.Tests.csproj
-dotnet build QuickSwitch.sln
+dotnet sln QuickSwitch.slnx add src/QuickSwitch.Core/QuickSwitch.Core.csproj src/QuickSwitch/QuickSwitch.csproj tests/QuickSwitch.Tests/QuickSwitch.Tests.csproj
+dotnet build QuickSwitch.slnx
 ```
 
 预期：`Build succeeded`，0 error。若 `CommunityToolkit.Mvvm 8.4.0` 还原失败，执行 `dotnet add src/QuickSwitch.Core/QuickSwitch.Core.csproj package CommunityToolkit.Mvvm` 取最新版，并把实际解析到的版本号写回 csproj。
@@ -1698,7 +1701,7 @@ public sealed class InverseBoolConverter : IValueConverter
 
 ```powershell
 cd 'D:\乱搞\Windows快捷开关'
-dotnet build QuickSwitch.sln
+dotnet build QuickSwitch.slnx
 ```
 
 预期：`Build succeeded`，0 error。
@@ -1816,7 +1819,7 @@ internal sealed class TrayHost : IDisposable
 
 ```powershell
 cd 'D:\乱搞\Windows快捷开关'
-dotnet build QuickSwitch.sln
+dotnet build QuickSwitch.slnx
 ```
 
 预期：`Build succeeded`，0 error。若 `Application` 有歧义，确认 `using Forms = System.Windows.Forms;` 是别名形式、`using System.Windows;` 是普通形式。
@@ -1882,7 +1885,7 @@ M0 + M1 已实现：托盘常驻、整体提权、分组卡片列表、防火墙
 
 ```powershell
 # 单测（无需管理员权限）
-dotnet test QuickSwitch.sln
+dotnet test QuickSwitch.slnx
 
 # 调试运行（会弹 UAC —— manifest 声明 requireAdministrator）
 dotnet run --project src/QuickSwitch/QuickSwitch.csproj
@@ -1916,8 +1919,8 @@ git --no-pager log --oneline -12
 
 ## 验收标准（M0 + M1 完成）
 
-- [ ] `dotnet build QuickSwitch.sln` 0 error。
-- [ ] `dotnet test QuickSwitch.sln` 全绿，且不要求管理员权限。
+- [ ] `dotnet build QuickSwitch.slnx` 0 error。
+- [ ] `dotnet test QuickSwitch.slnx` 全绿，且不要求管理员权限。
 - [ ] 双击发布的 `QuickSwitch.exe`：弹一次 UAC，窗口显示 `管理员模式`。
 - [ ] `安全` 分组下只有一张 `Windows 防火墙` 卡片，副标题与 `netsh advfirewall show allprofiles state` 一致。
 - [ ] 点胶囊能真实开/关三档防火墙，副标题跟随权威回读更新。
